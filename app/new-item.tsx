@@ -2,7 +2,7 @@ import {
   View, Text, TextInput, StyleSheet, Pressable, Switch,
   ScrollView, Alert, Modal, FlatList,
 } from 'react-native';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useLocalSearchParams, router } from 'expo-router';
 import { asc, eq } from 'drizzle-orm';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
@@ -15,7 +15,7 @@ const STATUSES = ['active', 'untested', 'tested', 'faulty', 'stored', 'sold', 'd
 type Status = (typeof STATUSES)[number];
 
 export default function AddItemScreen() {
-  const { catalogueId } = useLocalSearchParams<{ catalogueId: string }>();
+  const { catalogueId, parentId: initialParentId } = useLocalSearchParams<{ catalogueId?: string; parentId?: string }>();
 
   const [itemNumber, setItemNumber] = useState('');
   const [name, setName] = useState('');
@@ -39,6 +39,16 @@ export default function AddItemScreen() {
       .where(eq(item.canContain, true))
       .orderBy(asc(item.itemNumber))
   );
+
+  // Pre-fill container when launched from a container's + button
+  useEffect(() => {
+    if (!initialParentId || !containers || parentId) return;
+    const pre = containers.find(c => c.id === initialParentId);
+    if (pre) {
+      setParentId(pre.id);
+      setParentLabel(pre.itemNumber != null ? `#${String(pre.itemNumber).padStart(3, '0')} ${pre.name}` : pre.name);
+    }
+  }, [initialParentId, containers]);
 
   async function save() {
     let num: number | null = null;

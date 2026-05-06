@@ -15,6 +15,7 @@ export default function TabLayout() {
           ),
         }}
       />
+      <Tabs.Screen name="containers" options={{ title: 'Containers' }} />
       <Tabs.Screen name="search" options={{ title: 'Search' }} />
     </Tabs>
   );
