@@ -8,10 +8,13 @@ import type { Item } from '../../schema';
 
 const STATUS_COLOURS: Record<string, string> = {
   active:   '#34c759',
-  sold:     '#ff3b30',
-  lost:     '#ff9500',
-  donated:  '#007AFF',
+  untested: '#ff9500',
+  tested:   '#34c759',
+  faulty:   '#ff3b30',
   stored:   '#8e8e93',
+  sold:     '#5856d6',
+  donated:  '#007AFF',
+  lost:     '#ff9500',
 };
 
 export default function ItemListScreen() {
@@ -39,9 +42,22 @@ export default function ItemListScreen() {
         options={{
           title,
           headerRight: () => (
-            <Pressable onPress={() => router.push(`/catalogue/${catalogueId}`)} style={{ marginRight: 16 }}>
-              <Text style={{ color: '#007AFF', fontSize: 16 }}>Edit</Text>
-            </Pressable>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 8 }}>
+              <Pressable
+                onPress={() => router.push({ pathname: '/new-item', params: { catalogueId } })}
+                hitSlop={12}
+                style={{ paddingHorizontal: 12, paddingVertical: 8 }}
+              >
+                <Text style={{ color: '#007AFF', fontSize: 24, lineHeight: 26 }}>+</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => router.push(`/catalogue/${catalogueId}`)}
+                hitSlop={12}
+                style={{ paddingHorizontal: 12, paddingVertical: 8 }}
+              >
+                <Text style={{ color: '#007AFF', fontSize: 16 }}>Edit</Text>
+              </Pressable>
+            </View>
           ),
         }}
       />
@@ -69,11 +85,13 @@ function ItemRow({ item: i }: { item: Item }) {
   const subtitle = [i.manufacturer, i.model].filter(Boolean).join(' ');
 
   return (
-    <View style={styles.row}>
-      <View style={styles.numberBadge}>
-        <Text style={styles.numberText}>#{String(i.itemNumber).padStart(3, '0')}</Text>
-      </View>
-      <View style={styles.rowBody}>
+    <Pressable style={({ pressed }) => [styles.row, pressed && styles.rowPressed]} onPress={() => router.push({ pathname: '/edit-item', params: { itemId: i.id } })}>
+      {i.itemNumber != null && (
+        <View style={styles.numberBadge}>
+          <Text style={styles.numberText}>#{String(i.itemNumber).padStart(3, '0')}</Text>
+        </View>
+      )}
+      <View style={[styles.rowBody, i.itemNumber == null && styles.rowBodyNobadge]}>
         <Text style={styles.rowName}>{i.name}</Text>
         {subtitle ? <Text style={styles.rowSubtitle}>{subtitle}</Text> : null}
       </View>
@@ -82,7 +100,7 @@ function ItemRow({ item: i }: { item: Item }) {
           <Text style={styles.statusText}>{i.status}</Text>
         </View>
       )}
-    </View>
+    </Pressable>
   );
 }
 
@@ -103,6 +121,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     backgroundColor: '#fff',
   },
+  rowPressed: { backgroundColor: '#f0f0f0' },
   numberBadge: {
     backgroundColor: '#f0f0f0',
     borderRadius: 6,
@@ -114,6 +133,7 @@ const styles = StyleSheet.create({
   },
   numberText: { fontSize: 12, fontWeight: '600', color: '#555', fontVariant: ['tabular-nums'] },
   rowBody: { flex: 1 },
+  rowBodyNobadge: { marginLeft: 4 },
   rowName: { fontSize: 16, fontWeight: '500', color: '#111' },
   rowSubtitle: { fontSize: 13, color: '#666', marginTop: 2 },
   statusBadge: {

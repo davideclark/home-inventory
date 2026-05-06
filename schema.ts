@@ -56,7 +56,7 @@ export const catalogue = sqliteTable('catalogue', {
 // ---------------------------------------------------------------------------
 export const item = sqliteTable('item', {
   id:           text('id').primaryKey().$defaultFn(() => generateId()),
-  itemNumber:   integer('item_number').notNull().unique(),
+  itemNumber:   integer('item_number').unique(),
   catalogueId:  text('catalogue_id').references(() => catalogue.id),
   parentId:     text('parent_id'),                    // self-ref — see relations below
   name:         text('name').notNull(),
