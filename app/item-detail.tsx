@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 import { eq } from 'drizzle-orm';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { db } from '../db';
-import { item } from '../schema';
+import { item, catalogue } from '../schema';
 
 const STATUS_COLOURS: Record<string, string> = {
   active:   '#34c759',
@@ -24,6 +24,14 @@ export default function ItemDetailScreen() {
     db.select().from(item).where(eq(item.id, itemId)).limit(1)
   );
   const i = itemData?.[0];
+
+  const { data: catalogueData } = useLiveQuery(
+    db.select({ name: catalogue.name, icon: catalogue.icon })
+      .from(catalogue)
+      .where(eq(catalogue.id, i?.catalogueId ?? ''))
+      .limit(1)
+  );
+  const cat = catalogueData?.[0];
 
   const { data: containerItems } = useLiveQuery(
     db.select({ id: item.id, name: item.name, itemNumber: item.itemNumber, parentId: item.parentId })
@@ -96,8 +104,9 @@ export default function ItemDetailScreen() {
         </View>
 
         {/* Classification */}
-        {(i.manufacturer || i.model || i.type) && (
+        {(cat || i.manufacturer || i.model || i.type) && (
           <View style={styles.section}>
+            {cat && <Row label="Catalogue" value={cat.icon ? `${cat.icon} ${cat.name}` : cat.name} />}
             {i.manufacturer && <Row label="Manufacturer" value={i.manufacturer} />}
             {i.model && <Row label="Model" value={i.model} />}
             {i.type && <Row label="Type" value={i.type} />}
