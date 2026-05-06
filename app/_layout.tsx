@@ -2,11 +2,17 @@ import { Stack } from 'expo-router';
 import { Text, View, StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useMigrations } from 'drizzle-orm/expo-sqlite/migrator';
+import { useEffect } from 'react';
 import migrations from '../drizzle/migrations';
 import { db } from '../db';
+import { sync } from '../sync';
 
 export default function RootLayout() {
   const { success, error } = useMigrations(db, migrations);
+
+  useEffect(() => {
+    if (success) sync().catch(() => {});
+  }, [success]);
 
   if (error) {
     return (

@@ -90,15 +90,38 @@ app.get('/api/sync/pull', async (c) => {
 
 app.post('/api/sync/push', async (c) => {
   const { catalogues: cats = [], items: its = [] } = await c.req.json();
-  for (const cat of cats) {
-    await db.insert(catalogue).values(cat)
-      .onConflictDoUpdate({ target: catalogue.id, set: cat });
+
+  for (const { id: catId, ...catRest } of cats) {
+    await db.insert(catalogue).values({ id: catId, ...catRest })
+      .onConflictDoUpdate({ target: catalogue.id, set: catRest });
   }
-  for (const it of its) {
-    await db.insert(item).values(it)
-      .onConflictDoUpdate({ target: item.id, set: it });
+
+  const numbersCleared: number[] = [];
+  const skipped: string[] = [];
+  for (const { id: itemId, ...itemRest } of its) {
+    try {
+      await db.insert(item).values({ id: itemId, ...itemRest })
+        .onConflictDoUpdate({ target: item.id, set: itemRest });
+    } catch (err: any) {
+      const code = err.cause?.code;
+      const constraint = err.cause?.constraint_name;
+      if (code === '23505' && constraint === 'item_item_number_unique') {
+        // item_number clash — push without it
+        if (itemRest.itemNumber != null) numbersCleared.push(itemRest.itemNumber);
+        await db.insert(item).values({ id: itemId, ...itemRest, itemNumber: null })
+          .onConflictDoUpdate({ target: item.id, set: { ...itemRest, itemNumber: null } });
+      } else if (code === '23503' && constraint === 'item_catalogue_id_catalogue_id_fk') {
+        // catalogue doesn't exist on server — push without catalogueId
+        await db.insert(item).values({ id: itemId, ...itemRest, catalogueId: null })
+          .onConflictDoUpdate({ target: item.id, set: { ...itemRest, catalogueId: null } });
+        skipped.push(itemId);
+      } else {
+        throw err;
+      }
+    }
   }
-  return c.json({ ok: true, catalogues: cats.length, items: its.length });
+
+  return c.json({ ok: true, catalogues: cats.length, items: its.length, numbersCleared, skipped });
 });
 
 const port = Number(process.env.PORT ?? 3000);

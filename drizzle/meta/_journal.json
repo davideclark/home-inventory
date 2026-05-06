@@ -15,6 +15,13 @@
       "when": 1778077650747,
       "tag": "0001_heavy_rocket_racer",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1778101170807,
+      "tag": "0002_even_mystique",
+      "breakpoints": true
     }
   ]
 }

@@ -6,9 +6,7 @@ import { useState } from 'react';
 import { router } from 'expo-router';
 import { db } from '../../db';
 import { catalogue } from '../../schema';
-
-// Placeholder until persistent device UUID is implemented for sync
-const DEVICE_ID = 'local';
+import { getDeviceId } from '../../sync';
 
 export default function AddCatalogueScreen() {
   const [name, setName] = useState('');
@@ -30,7 +28,7 @@ export default function AddCatalogueScreen() {
         description: description.trim() || null,
         sortOrder: sortOrder ? parseInt(sortOrder, 10) : null,
         isStructural: false,
-        deviceId: DEVICE_ID,
+        deviceId: await getDeviceId(),
       });
       router.back();
     } catch (e) {

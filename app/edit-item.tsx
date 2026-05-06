@@ -8,8 +8,7 @@ import { asc, eq, and, ne } from 'drizzle-orm';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { db } from '../db';
 import { item, catalogue } from '../schema';
-
-const DEVICE_ID = 'local';
+import { getDeviceId } from '../sync';
 
 const STATUSES = ['active', 'untested', 'tested', 'faulty', 'stored', 'sold', 'donated', 'lost'] as const;
 type Status = (typeof STATUSES)[number];
@@ -142,7 +141,7 @@ export default function EditItemScreen() {
           parentId,
           lastModified: new Date().toISOString(),
           synced: false,
-          deviceId: DEVICE_ID,
+          deviceId: await getDeviceId(),
         })
         .where(eq(item.id, itemId));
       router.back();

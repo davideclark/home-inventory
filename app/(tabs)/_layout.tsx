@@ -1,5 +1,6 @@
 import { Tabs, router } from 'expo-router';
 import { Pressable, Text } from 'react-native';
+import SyncButton from '../../components/SyncButton';
 
 export default function TabLayout() {
   return (
@@ -8,6 +9,7 @@ export default function TabLayout() {
         name="index"
         options={{
           title: 'Catalogues',
+          headerLeft: () => <SyncButton />,
           headerRight: () => (
             <Pressable onPress={() => router.push('/catalogue/add')} style={{ marginRight: 16 }}>
               <Text style={{ fontSize: 28, color: '#007AFF', lineHeight: 32 }}>+</Text>
@@ -15,8 +17,8 @@ export default function TabLayout() {
           ),
         }}
       />
-      <Tabs.Screen name="containers" options={{ title: 'Containers' }} />
-      <Tabs.Screen name="search" options={{ title: 'Search' }} />
+      <Tabs.Screen name="containers" options={{ title: 'Containers', headerLeft: () => <SyncButton /> }} />
+      <Tabs.Screen name="search"     options={{ title: 'Search',     headerLeft: () => <SyncButton /> }} />
     </Tabs>
   );
 }

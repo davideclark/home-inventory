@@ -89,6 +89,15 @@ export const item = sqliteTable('item', {
 // item records via entity_type + entity_id. Referential integrity is
 // app-enforced (no DB-level FK) so that deletes don't cascade log rows.
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// settings
+// Key/value store for app-level state: device_id, last_sync_at, etc.
+// ---------------------------------------------------------------------------
+export const settings = sqliteTable('settings', {
+  key:   text('key').primaryKey(),
+  value: text('value').notNull(),
+});
+
 export const syncLog = sqliteTable('sync_log', {
   id:         text('id').primaryKey().$defaultFn(() => generateId()),
   entityType: text('entity_type', { enum: ['catalogue', 'item'] }).notNull(),
@@ -134,3 +143,4 @@ export type Item         = typeof item.$inferSelect;
 export type NewItem      = typeof item.$inferInsert;
 export type SyncLog      = typeof syncLog.$inferSelect;
 export type NewSyncLog   = typeof syncLog.$inferInsert;
+export type Settings     = typeof settings.$inferSelect;

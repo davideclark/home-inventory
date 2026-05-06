@@ -22,6 +22,7 @@ models/
 
 # Environment & secrets
 .env
+server/src/import-notion.ts
 .env.local
 .env.*.local
 .claudecode.json
