@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+
+# Native build outputs
+ios/
+android/
+
+# Local databases
+*.db
+*.db-shm
+*.db-wal
+
+# ML models (large binary files)
+models/
+
+# Environment & secrets
+.env
+.env.local
+.env.*.local
+.claudecode.json
+
+# Claude Code local settings
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+*.swp
