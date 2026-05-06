@@ -1,7 +1,9 @@
-import { FlatList, View, Text, StyleSheet, Pressable } from 'react-native';
+import { FlatList, View, Text, StyleSheet, Pressable, Alert } from 'react-native';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
+import { useRef } from 'react';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { asc, eq } from 'drizzle-orm';
+import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { db } from '../../db';
 import { catalogue, item } from '../../schema';
 import type { Item } from '../../schema';
@@ -41,23 +43,16 @@ export default function ItemListScreen() {
       <Stack.Screen
         options={{
           title,
+          headerBackTitle: '',
+          headerBackButtonDisplayMode: 'minimal',
           headerRight: () => (
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 8 }}>
-              <Pressable
-                onPress={() => router.push({ pathname: '/new-item', params: { catalogueId } })}
-                hitSlop={12}
-                style={{ paddingHorizontal: 12, paddingVertical: 8 }}
-              >
-                <Text style={{ color: '#007AFF', fontSize: 24, lineHeight: 26 }}>+</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => router.push(`/catalogue/${catalogueId}`)}
-                hitSlop={12}
-                style={{ paddingHorizontal: 12, paddingVertical: 8 }}
-              >
-                <Text style={{ color: '#007AFF', fontSize: 16 }}>Edit</Text>
-              </Pressable>
-            </View>
+            <Pressable
+              onPress={() => router.push({ pathname: '/new-item', params: { catalogueId } })}
+              hitSlop={12}
+              style={{ paddingHorizontal: 12, paddingVertical: 8, marginRight: 4 }}
+            >
+              <Text style={{ color: '#007AFF', fontSize: 24, lineHeight: 26 }}>+</Text>
+            </Pressable>
           ),
         }}
       />
@@ -81,26 +76,75 @@ export default function ItemListScreen() {
 }
 
 function ItemRow({ item: i }: { item: Item }) {
+  const swipeRef = useRef<Swipeable>(null);
   const statusColour = STATUS_COLOURS[i.status ?? 'active'] ?? '#8e8e93';
   const subtitle = [i.manufacturer, i.model].filter(Boolean).join(' ');
 
-  return (
-    <Pressable style={({ pressed }) => [styles.row, pressed && styles.rowPressed]} onPress={() => router.push({ pathname: '/edit-item', params: { itemId: i.id } })}>
-      {i.itemNumber != null && (
-        <View style={styles.numberBadge}>
-          <Text style={styles.numberText}>#{String(i.itemNumber).padStart(3, '0')}</Text>
-        </View>
-      )}
-      <View style={[styles.rowBody, i.itemNumber == null && styles.rowBodyNobadge]}>
-        <Text style={styles.rowName}>{i.name}</Text>
-        {subtitle ? <Text style={styles.rowSubtitle}>{subtitle}</Text> : null}
+  function renderRightActions() {
+    return (
+      <View style={styles.swipeActions}>
+        <Pressable
+          style={styles.editAction}
+          onPress={() => {
+            swipeRef.current?.close();
+            router.push({ pathname: '/edit-item', params: { itemId: i.id } });
+          }}
+        >
+          <Text style={styles.actionText}>Edit</Text>
+        </Pressable>
+        <Pressable
+          style={styles.deleteAction}
+          onPress={() => {
+            swipeRef.current?.close();
+            Alert.alert(
+              'Delete Item',
+              `Delete "${i.name}"? This cannot be undone.`,
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Delete',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      await db.delete(item).where(eq(item.id, i.id));
+                    } catch (e) {
+                      const msg = e instanceof Error ? e.message : String(e);
+                      Alert.alert('Cannot delete', msg);
+                    }
+                  },
+                },
+              ]
+            );
+          }}
+        >
+          <Text style={styles.actionText}>Delete</Text>
+        </Pressable>
       </View>
-      {i.status && i.status !== 'active' && (
-        <View style={[styles.statusBadge, { backgroundColor: statusColour }]}>
-          <Text style={styles.statusText}>{i.status}</Text>
+    );
+  }
+
+  return (
+    <Swipeable ref={swipeRef} renderRightActions={renderRightActions} friction={2}>
+      <Pressable
+        style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+        onPress={() => router.push({ pathname: '/item-detail', params: { itemId: i.id } })}
+      >
+        {i.itemNumber != null && (
+          <View style={styles.numberBadge}>
+            <Text style={styles.numberText}>#{String(i.itemNumber).padStart(3, '0')}</Text>
+          </View>
+        )}
+        <View style={[styles.rowBody, i.itemNumber == null && styles.rowBodyNobadge]}>
+          <Text style={styles.rowName}>{i.name}</Text>
+          {subtitle ? <Text style={styles.rowSubtitle}>{subtitle}</Text> : null}
         </View>
-      )}
-    </Pressable>
+        {i.status && i.status !== 'active' && (
+          <View style={[styles.statusBadge, { backgroundColor: statusColour }]}>
+            <Text style={styles.statusText}>{i.status}</Text>
+          </View>
+        )}
+      </Pressable>
+    </Swipeable>
   );
 }
 
@@ -148,4 +192,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#ddd',
     marginLeft: 76,
   },
+  swipeActions: { flexDirection: 'row' },
+  editAction: {
+    backgroundColor: '#007AFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 80,
+  },
+  deleteAction: {
+    backgroundColor: '#ff3b30',
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 80,
+  },
+  actionText: { color: '#fff', fontSize: 15, fontWeight: '600' },
 });

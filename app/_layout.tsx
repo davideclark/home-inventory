@@ -27,11 +27,12 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={styles.flex}>
       <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="(tabs)" options={{ headerShown: false, headerBackTitle: '' }} />
         <Stack.Screen name="catalogue/add" options={{ title: 'Add Catalogue', presentation: 'modal' }} />
         <Stack.Screen name="catalogue/[id]" options={{ title: 'Edit Catalogue', presentation: 'modal' }} />
         <Stack.Screen name="new-item" options={{ title: 'Add Item', presentation: 'modal' }} />
         <Stack.Screen name="edit-item" options={{ title: 'Edit Item', presentation: 'modal' }} />
+        <Stack.Screen name="item-detail" options={{ presentation: 'modal' }} />
         <Stack.Screen name="items/[catalogueId]" options={{ title: 'Items' }} />
       </Stack>
     </GestureHandlerRootView>
