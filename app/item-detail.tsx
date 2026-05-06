@@ -1,5 +1,6 @@
 import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
+import { useMemo } from 'react';
 import { eq } from 'drizzle-orm';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { db } from '../db';
@@ -24,13 +25,17 @@ export default function ItemDetailScreen() {
   );
   const i = itemData?.[0];
 
-  const { data: parentData } = useLiveQuery(
-    db.select({ id: item.id, name: item.name, itemNumber: item.itemNumber })
+  const { data: containerItems } = useLiveQuery(
+    db.select({ id: item.id, name: item.name, itemNumber: item.itemNumber, parentId: item.parentId })
       .from(item)
-      .where(eq(item.id, i?.parentId ?? ''))
-      .limit(1)
+      .where(eq(item.canContain, true))
   );
-  const parent = parentData?.[0];
+
+  const containerMap = useMemo(() => {
+    const map = new Map<string, { name: string; itemNumber: number | null; parentId: string | null }>();
+    containerItems?.forEach(c => map.set(c.id, { name: c.name, itemNumber: c.itemNumber, parentId: c.parentId }));
+    return map;
+  }, [containerItems]);
 
   if (!i) {
     return (
@@ -41,9 +46,21 @@ export default function ItemDetailScreen() {
   }
 
   const statusColour = STATUS_COLOURS[i.status ?? 'active'] ?? '#8e8e93';
-  const parentLabel = parent
-    ? (parent.itemNumber != null ? `#${String(parent.itemNumber).padStart(3, '0')} ${parent.name}` : parent.name)
-    : null;
+
+  function buildPath(parentId: string | null | undefined): string {
+    if (!parentId) return '';
+    const parts: string[] = [];
+    let id: string | null = parentId;
+    while (id) {
+      const c = containerMap.get(id);
+      if (!c) break;
+      parts.unshift(c.itemNumber != null ? `#${String(c.itemNumber).padStart(3, '0')} ${c.name}` : c.name);
+      id = c.parentId;
+    }
+    return parts.join(' › ');
+  }
+
+  const containerPath = buildPath(i.parentId);
 
   return (
     <>
@@ -105,9 +122,9 @@ export default function ItemDetailScreen() {
         )}
 
         {/* Container */}
-        {(parentLabel || i.canContain) && (
+        {(containerPath || i.canContain) && (
           <View style={styles.section}>
-            {parentLabel && <Row label="Container" value={parentLabel} />}
+            {containerPath && <Row label="Location" value={containerPath} />}
             {i.canContain && <Row label="Can contain items" value="Yes" />}
           </View>
         )}

@@ -1,6 +1,6 @@
 import { FlatList, View, Text, StyleSheet, Pressable, Alert } from 'react-native';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
-import { useRef } from 'react';
+import { useRef, useMemo } from 'react';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { asc, eq } from 'drizzle-orm';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
@@ -35,6 +35,18 @@ export default function ItemListScreen() {
       .orderBy(asc(item.itemNumber))
   );
 
+  const { data: containerItems } = useLiveQuery(
+    db.select({ id: item.id, name: item.name, itemNumber: item.itemNumber, parentId: item.parentId })
+      .from(item)
+      .where(eq(item.canContain, true))
+  );
+
+  const containerMap = useMemo(() => {
+    const map = new Map<string, { name: string; itemNumber: number | null; parentId: string | null }>();
+    containerItems?.forEach(c => map.set(c.id, { name: c.name, itemNumber: c.itemNumber, parentId: c.parentId }));
+    return map;
+  }, [containerItems]);
+
   const cat = catData?.[0];
   const title = cat ? `${cat.icon ? cat.icon + ' ' : ''}${cat.name}` : 'Items';
 
@@ -67,7 +79,7 @@ export default function ItemListScreen() {
           data={items}
           keyExtractor={(i) => i.id}
           contentContainerStyle={styles.list}
-          renderItem={({ item: i }) => <ItemRow item={i} />}
+          renderItem={({ item: i }) => <ItemRow item={i} containerMap={containerMap} />}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
         />
       )}
@@ -75,10 +87,26 @@ export default function ItemListScreen() {
   );
 }
 
-function ItemRow({ item: i }: { item: Item }) {
+type ContainerMap = Map<string, { name: string; itemNumber: number | null; parentId: string | null }>;
+
+function buildPath(parentId: string | null | undefined, map: ContainerMap): string {
+  if (!parentId) return '';
+  const parts: string[] = [];
+  let id: string | null = parentId;
+  while (id) {
+    const c = map.get(id);
+    if (!c) break;
+    parts.unshift(c.itemNumber != null ? `#${String(c.itemNumber).padStart(3, '0')} ${c.name}` : c.name);
+    id = c.parentId;
+  }
+  return parts.join(' › ');
+}
+
+function ItemRow({ item: i, containerMap }: { item: Item; containerMap: ContainerMap }) {
   const swipeRef = useRef<Swipeable>(null);
   const statusColour = STATUS_COLOURS[i.status ?? 'active'] ?? '#8e8e93';
   const subtitle = [i.manufacturer, i.model].filter(Boolean).join(' ');
+  const containerPath = buildPath(i.parentId, containerMap);
 
   function renderRightActions() {
     return (
@@ -137,6 +165,7 @@ function ItemRow({ item: i }: { item: Item }) {
         <View style={[styles.rowBody, i.itemNumber == null && styles.rowBodyNobadge]}>
           <Text style={styles.rowName}>{i.name}</Text>
           {subtitle ? <Text style={styles.rowSubtitle}>{subtitle}</Text> : null}
+          {containerPath ? <Text style={styles.rowPath}>{containerPath}</Text> : null}
         </View>
         {i.status && i.status !== 'active' && (
           <View style={[styles.statusBadge, { backgroundColor: statusColour }]}>
@@ -180,6 +209,7 @@ const styles = StyleSheet.create({
   rowBodyNobadge: { marginLeft: 4 },
   rowName: { fontSize: 16, fontWeight: '500', color: '#111' },
   rowSubtitle: { fontSize: 13, color: '#666', marginTop: 2 },
+  rowPath: { fontSize: 11, color: '#aaa', marginTop: 2 },
   statusBadge: {
     borderRadius: 6,
     paddingHorizontal: 8,
