@@ -1,0 +1,25 @@
+{
+  "name": "home-inventory-server",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "tsx src/api.ts",
+    "build": "tsc",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.13.7",
+    "@modelcontextprotocol/sdk": "^1.10.2",
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.7.10",
+    "postgres": "^3.4.5",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "drizzle-kit": "^0.30.6",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.3"
+  }
+}
