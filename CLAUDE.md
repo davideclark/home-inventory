@@ -6,11 +6,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A personal home inventory app for cataloguing hardware collections. Built with Expo (React Native) targeting iOS, Android, and web. Fully offline-first with SQLite on device; syncs to a self-hosted Hono/PostgreSQL backend on a Synology NAS.
 
-Requirements and data model are documented in Notion:
+Requirements and data model are documented in Notion (for reference only):
 - Overview: https://www.notion.so/Home-Inventory-App-357f3ff0a69081e4b728cf7c70bd347b
 - Data Model: https://www.notion.so/357f3ff0a6908191b4faf1b656e68aeb
 - Requirements: https://www.notion.so/357f3ff0a690812b92ecf2465f496130
-- Inventory data: https://www.notion.so/Hardware-Inventory-34ff3ff0a690817899a9cb25c4531adb (24 databases, ~187 items imported)
+
+**Inventory data is managed exclusively in the PostgreSQL database via the inventory MCP server.** Notion is no longer used for inventory management — it was the source for the one-off initial import only. Use `mcp__inventory__*` tools for all inventory queries and edits.
 
 ## Tech Stack
 
@@ -179,7 +180,7 @@ All mutable tables carry `device_id`, `last_modified`, and `synced` for offline-
 
 ## MCP Servers
 
-### `.claudecode.json` (gitignored — contains API token)
+### `.mcp.json` (gitignored — contains API token)
 1. **notion** — `@notionhq/notion-mcp-server` — read/write Notion databases
 2. **inventory** — `npx tsx server/src/mcp.ts` — read/write local PostgreSQL inventory
 

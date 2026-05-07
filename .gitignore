@@ -26,6 +26,7 @@ server/src/import-notion.ts
 .env.local
 .env.*.local
 .claudecode.json
+.mcp.json
 
 # Claude Code local settings
 .claude/

@@ -1,5 +1,5 @@
-import { View, Text, TextInput, FlatList, StyleSheet, Pressable } from 'react-native';
-import { useState } from 'react';
+import { View, Text, TextInput, FlatList, StyleSheet, Pressable, Keyboard } from 'react-native';
+import { useState, useRef } from 'react';
 import { router } from 'expo-router';
 import { or, like, eq, asc, sql } from 'drizzle-orm';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
@@ -19,7 +19,15 @@ const STATUS_COLOURS: Record<string, string> = {
 
 export default function SearchScreen() {
   const [query, setQuery] = useState('');
+  const [focused, setFocused] = useState(false);
+  const inputRef = useRef<TextInput>(null);
   const q = query.trim();
+
+  function cancel() {
+    setQuery('');
+    Keyboard.dismiss();
+    inputRef.current?.blur();
+  }
 
   const { data: results } = useLiveQuery(
     db.select({
@@ -53,9 +61,13 @@ export default function SearchScreen() {
       {/* Search bar */}
       <View style={styles.searchBar}>
         <TextInput
+          ref={inputRef}
           style={styles.searchInput}
           value={query}
           onChangeText={setQuery}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          onSubmitEditing={() => Keyboard.dismiss()}
           placeholder="Search items…"
           placeholderTextColor="#aaa"
           clearButtonMode="while-editing"
@@ -63,9 +75,9 @@ export default function SearchScreen() {
           autoCapitalize="none"
           returnKeyType="search"
         />
-        {query.length > 0 && (
-          <Pressable hitSlop={8} onPress={() => setQuery('')} style={styles.clearBtn}>
-            <Text style={styles.clearBtnText}>✕</Text>
+        {focused && (
+          <Pressable hitSlop={8} onPress={cancel} style={styles.cancelBtn}>
+            <Text style={styles.cancelBtnText}>Cancel</Text>
           </Pressable>
         )}
       </View>
@@ -92,7 +104,7 @@ export default function SearchScreen() {
             return (
               <Pressable
                 style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-                onPress={() => router.push({ pathname: '/item-detail', params: { itemId: r.id } })}
+                onPress={() => { Keyboard.dismiss(); router.push({ pathname: '/item-detail', params: { itemId: r.id } }); }}
               >
                 {r.itemNumber != null && (
                   <View style={styles.numberBadge}>
@@ -139,8 +151,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#111',
   },
-  clearBtn: { paddingLeft: 10 },
-  clearBtnText: { fontSize: 14, color: '#999' },
+  cancelBtn: { paddingLeft: 12 },
+  cancelBtnText: { fontSize: 16, color: '#007AFF' },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   hintText: { fontSize: 15, color: '#888' },
   list: { paddingVertical: 8 },

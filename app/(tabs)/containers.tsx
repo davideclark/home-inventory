@@ -1,16 +1,39 @@
 import { FlatList, View, Text, StyleSheet, Pressable } from 'react-native';
 import { router } from 'expo-router';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
-import { eq, asc, isNull, and } from 'drizzle-orm';
+import { eq, isNull, and } from 'drizzle-orm';
+import { useMemo } from 'react';
 import { db } from '../../db';
 import { item } from '../../schema';
 
+function naturalSort(a: string, b: string): number {
+  const re = /(\d+)/g;
+  const ap = a.split(re);
+  const bp = b.split(re);
+  for (let i = 0; i < Math.max(ap.length, bp.length); i++) {
+    const as = ap[i] ?? '';
+    const bs = bp[i] ?? '';
+    if (i % 2 === 1) {
+      const diff = parseInt(as, 10) - parseInt(bs, 10);
+      if (diff !== 0) return diff;
+    } else {
+      const cmp = as.toLowerCase() < bs.toLowerCase() ? -1 : as.toLowerCase() > bs.toLowerCase() ? 1 : 0;
+      if (cmp !== 0) return cmp;
+    }
+  }
+  return 0;
+}
+
 export default function ContainersScreen() {
-  const { data: containers } = useLiveQuery(
+  const { data: rawContainers } = useLiveQuery(
     db.select({ id: item.id, name: item.name, itemNumber: item.itemNumber })
       .from(item)
       .where(and(eq(item.canContain, true), isNull(item.parentId)))
-      .orderBy(asc(item.itemNumber))
+  );
+
+  const containers = useMemo(
+    () => [...(rawContainers ?? [])].sort((a, b) => naturalSort(a.name, b.name)),
+    [rawContainers]
   );
 
   if (!containers || containers.length === 0) {

@@ -2,7 +2,7 @@ import { FlatList, View, Text, StyleSheet, Pressable, Alert, SectionList } from 
 import { useLocalSearchParams, router, Stack } from 'expo-router';
 import { useRef, useMemo } from 'react';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
-import { eq, asc } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { db } from '../../db';
 import { item, catalogue } from '../../schema';
@@ -17,6 +17,24 @@ const STATUS_COLOURS: Record<string, string> = {
   donated:  '#007AFF',
   lost:     '#ff9500',
 };
+
+function naturalSort(a: string, b: string): number {
+  const re = /(\d+)/g;
+  const ap = a.split(re);
+  const bp = b.split(re);
+  for (let i = 0; i < Math.max(ap.length, bp.length); i++) {
+    const as = ap[i] ?? '';
+    const bs = bp[i] ?? '';
+    if (i % 2 === 1) {
+      const diff = parseInt(as, 10) - parseInt(bs, 10);
+      if (diff !== 0) return diff;
+    } else {
+      const cmp = as.toLowerCase() < bs.toLowerCase() ? -1 : as.toLowerCase() > bs.toLowerCase() ? 1 : 0;
+      if (cmp !== 0) return cmp;
+    }
+  }
+  return 0;
+}
 
 type ContainerMap = Map<string, { name: string; itemNumber: number | null; parentId: string | null }>;
 
@@ -72,11 +90,16 @@ export default function ContainerScreen() {
       .from(item)
       .leftJoin(catalogue, eq(item.catalogueId, catalogue.id))
       .where(eq(item.parentId, itemId))
-      .orderBy(asc(item.itemNumber))
   );
 
-  const subContainers = children?.filter(c => c.canContain) ?? [];
-  const items = children?.filter(c => !c.canContain) ?? [];
+  const subContainers = useMemo(
+    () => (children?.filter(c => c.canContain) ?? []).sort((a, b) => naturalSort(a.name, b.name)),
+    [children]
+  );
+  const items = useMemo(
+    () => (children?.filter(c => !c.canContain) ?? []).sort((a, b) => naturalSort(a.name, b.name)),
+    [children]
+  );
 
   const title = container
     ? (container.itemNumber != null ? `#${String(container.itemNumber).padStart(3, '0')} ${container.name}` : container.name)
