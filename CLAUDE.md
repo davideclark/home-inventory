@@ -33,6 +33,15 @@ Requirements and data model are documented in Notion (for reference only):
 - **Production deployment**: Synology DS1621+ NAS — Tailscale IP `100.110.8.60`, API on port 3000, postgres on port 5433
 - **Docker image**: `davideclark/home-inventory-api:latest` — multi-platform (amd64, arm64, arm/v7)
 
+### Web frontend (web/)
+- **Framework**: Next.js 15 + Tailwind CSS
+- **Data fetching**: TanStack Query
+- **API access**: proxy route (`app/api/proxy/[...path]/route.ts`) forwards all requests to backend, adding token server-side
+- **Pages**: Catalogues, Items per catalogue, Containers (hierarchy), Search, Settings
+- **Config**: `API_URL` and `API_TOKEN` env vars — set via Docker Compose in prod, `.env.local` in dev
+- **Production**: port 3001 — `http://192.168.1.201:3001` (local) or `http://100.110.8.60:3001` (Tailscale)
+- **Docker image**: `davideclark/home-inventory-web:latest` — multi-platform (amd64, arm64, arm/v7)
+
 ## Common Commands
 
 ### Mobile app
@@ -51,6 +60,23 @@ docker compose up -d postgres           # start PostgreSQL only
 cd server && npx tsx src/api.ts         # run API locally (dev)
 cd server && npx drizzle-kit generate   # generate migration after schema change
 cd server && npx drizzle-kit migrate    # apply migrations
+```
+
+### Web frontend
+```bash
+cd web && npm run dev       # start dev server on port 3001 (needs web/.env.local)
+cd web && npx tsc --noEmit  # type-check
+```
+
+**web/.env.local** (dev only, gitignored):
+```
+API_URL=http://DS1621plus.local:3000
+API_TOKEN=ClarenceRoad
+```
+
+**To rebuild and push the web Docker image:**
+```bash
+docker buildx build --platform linux/amd64,linux/arm64,linux/arm/v7 -t davideclark/home-inventory-web:latest --push ./web
 ```
 
 **DATABASE_URL (local dev)**: `postgresql://inventory:inventory_local@localhost:5432/home_inventory`
