@@ -22,6 +22,8 @@ services:
     environment:
       DATABASE_URL: postgresql://inventory:${POSTGRES_PASSWORD:-inventory_local}@postgres:5432/home_inventory
       PORT: 3000
+      API_TOKEN: ${API_TOKEN:-}
+      SERVER_NAME: ${SERVER_NAME:-Home Inventory}
     ports:
       - "3000:3000"
     depends_on:

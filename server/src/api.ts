@@ -5,9 +5,23 @@ import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import { db } from './db';
 import { catalogue, item } from './schema';
 
+const API_TOKEN   = process.env.API_TOKEN   ?? '';
+const SERVER_NAME = process.env.SERVER_NAME ?? 'Home Inventory';
+
 const app = new Hono();
 
-app.get('/api/health', (c) => c.json({ status: 'ok' }));
+// Token auth — skip for /api/health and /api/discover
+app.use('/api/*', async (c, next) => {
+  if (API_TOKEN && c.req.path !== '/api/health' && c.req.path !== '/api/discover') {
+    if (c.req.header('X-API-Token') !== API_TOKEN) {
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
+  }
+  return next();
+});
+
+app.get('/api/health',   (c) => c.json({ status: 'ok' }));
+app.get('/api/discover', (c) => c.json({ name: SERVER_NAME, version: '1.0.0', requiresToken: !!API_TOKEN }));
 
 // ── Catalogues ──────────────────────────────────────────────────────────────
 

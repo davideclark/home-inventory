@@ -2,8 +2,6 @@ import { eq, sql } from 'drizzle-orm';
 import { db } from './db';
 import { catalogue, item, settings } from './schema';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000';
-
 function isoNow(): string {
   return new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
 }
@@ -23,6 +21,8 @@ async function setSetting(key: string, value: string): Promise<void> {
 }
 
 let _deviceId: string | null = null;
+let _apiUrl: string | null = null;
+let _apiToken: string | null = null;
 
 export async function getDeviceId(): Promise<string> {
   if (_deviceId) return _deviceId;
@@ -37,6 +37,35 @@ export async function getDeviceId(): Promise<string> {
   return id;
 }
 
+async function getApiUrl(): Promise<string> {
+  if (_apiUrl) return _apiUrl;
+  const stored = await getSetting('api_url');
+  _apiUrl = stored ?? process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000';
+  return _apiUrl!;
+}
+
+async function getApiToken(): Promise<string | null> {
+  if (_apiToken !== null) return _apiToken || null;
+  _apiToken = (await getSetting('api_token')) ?? '';
+  return _apiToken || null;
+}
+
+export function clearApiConfigCache(): void {
+  _apiUrl = null;
+  _apiToken = null;
+}
+
+export async function isServerConfigured(): Promise<boolean> {
+  const stored = await getSetting('api_url');
+  if (stored) return true;
+  return !!process.env.EXPO_PUBLIC_API_URL;
+}
+
+async function authHeaders(): Promise<Record<string, string>> {
+  const token = await getApiToken();
+  return token ? { 'X-API-Token': token } : {};
+}
+
 export async function getLastSyncAt(): Promise<string | null> {
   return getSetting('last_sync_at');
 }
@@ -45,7 +74,6 @@ async function push(): Promise<number> {
   const deviceId = await getDeviceId();
   const now = isoNow();
 
-  // Remove orphaned items (catalogue was deleted locally but item survived)
   await db.run(
     sql`DELETE FROM item
         WHERE synced = 0
@@ -60,9 +88,10 @@ async function push(): Promise<number> {
 
   if (!unsyncedCats.length && !unsyncedItems.length) return 0;
 
-  const res = await fetch(`${API_URL}/api/sync/push`, {
+  const apiUrl = await getApiUrl();
+  const res = await fetch(`${apiUrl}/api/sync/push`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...await authHeaders() },
     body: JSON.stringify({
       catalogues: unsyncedCats.map(c => ({ ...c, deviceId, lastModified: now })),
       items: unsyncedItems.map(i => ({
@@ -89,7 +118,10 @@ async function push(): Promise<number> {
 }
 
 async function pull(since: string): Promise<number> {
-  const res = await fetch(`${API_URL}/api/sync/pull?since=${encodeURIComponent(since)}`);
+  const apiUrl = await getApiUrl();
+  const res = await fetch(`${apiUrl}/api/sync/pull?since=${encodeURIComponent(since)}`, {
+    headers: await authHeaders(),
+  });
   if (!res.ok) throw new Error(`Pull failed: ${res.status}`);
 
   const { catalogues: serverCats = [], items: serverItems = [] } = await res.json();
