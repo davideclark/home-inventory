@@ -1,4 +1,4 @@
-import { View, Text, TextInput, StyleSheet, Pressable, ActivityIndicator, ScrollView } from 'react-native';
+import { View, Text, TextInput, StyleSheet, Pressable, ActivityIndicator, ScrollView, Keyboard } from 'react-native';
 import { useState, useEffect, useCallback } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { eq } from 'drizzle-orm';
@@ -35,6 +35,7 @@ export default function SettingsScreen() {
   }, []));
 
   async function testAndSave() {
+    Keyboard.dismiss();
     const trimmedUrl = url.trim().replace(/\/$/, '');
     setSaving(true);
     setStatus('testing');
