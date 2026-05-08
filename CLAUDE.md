@@ -103,6 +103,11 @@ docker buildx build --platform linux/amd64,linux/arm64,linux/arm/v7 -t davidecla
 ssh -p 8888 david@DS1621plus.local "cd /volume1/docker/home-inventory && sudo /usr/local/bin/docker compose -f docker-compose.prod.yml pull && sudo /usr/local/bin/docker compose -f docker-compose.prod.yml up -d"
 ```
 
+**To copy updated docker-compose.prod.yml to NAS** (SCP doesn't work — use SSH pipe):
+```bash
+Get-Content docker-compose.prod.yml -Raw | ssh -p 8888 david@DS1621plus.local "cat > /volume1/docker/home-inventory/docker-compose.prod.yml"
+```
+
 **Always use `npx expo install <pkg>` for Expo ecosystem packages** — it resolves SDK-compatible versions. `.npmrc` sets `legacy-peer-deps=true` project-wide to handle React peer dependency conflicts. For React itself, pin to `19.1.0`.
 
 ## Project Structure
@@ -165,8 +170,26 @@ server/
   Dockerfile               Builds REST API container
 
 docker-compose.yml         PostgreSQL + REST API containers (local dev)
-docker-compose.prod.yml    PostgreSQL + REST API containers (NAS production)
+docker-compose.prod.yml    PostgreSQL + REST API + web containers (NAS production)
 .claudecode.json           MCP servers: notion + inventory (gitignored — contains secrets)
+
+web/
+  app/
+    api/proxy/[...path]/   Next.js route handler — proxies all API calls server-side (adds token)
+    catalogues/            Catalogue list + items per catalogue
+    containers/            Container hierarchy (drill-down)
+    search/                Full-text search
+    settings/              Connection status
+  components/
+    Nav.tsx                Top navigation bar
+    Modal.tsx              Reusable modal wrapper
+    ConfirmDialog.tsx      Delete confirmation dialog
+    ItemModal.tsx          Add/edit item form — all fields + container picker
+  lib/
+    api.ts                 Fetch wrappers for all API endpoints
+    types.ts               TypeScript types mirroring server schema
+  Dockerfile               Builds web container (standalone Next.js output)
+  next.config.ts           output: standalone for Docker
 ```
 
 ## Navigation Structure
@@ -233,7 +256,7 @@ All mutable tables carry `device_id`, `last_modified`, and `synced` for offline-
 - Container path display: load all `canContain=true` items into a `Map`, walk `parentId` chain upward. See `buildPath()` in `items/[catalogueId].tsx`.
 - **Header components** (headerLeft/headerRight in tab options) are rendered by React Navigation outside the screen's React tree — they cannot consume React context from providers inside the Stack. `SyncButton` uses local `useState` and calls `sync()` directly for this reason.
 - `.npmrc` sets `legacy-peer-deps=true` — required for `npx expo install` and EAS Build `npm ci` to resolve React peer dependency conflicts.
-- **Web is not supported** — `expo-sqlite` requires `SharedArrayBuffer` on web which needs special server headers not provided by the Expo dev server.
+- **Expo web is not supported** — `expo-sqlite` requires `SharedArrayBuffer` on web which needs special server headers not provided by the Expo dev server. The web frontend is a separate Next.js app in `web/` that talks directly to the REST API.
 
 ### Backend
 - PostgreSQL schema uses `jsonb` for the `spec` column (vs `text` in SQLite) — no shape validation, fully flexible per catalogue.
