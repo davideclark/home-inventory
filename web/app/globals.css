@@ -1,0 +1,36 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-gray-100 text-gray-900 antialiased;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply px-4 py-2 rounded-lg bg-blue-500 text-white text-sm font-medium hover:bg-blue-600 active:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors;
+  }
+  .btn-secondary {
+    @apply px-4 py-2 rounded-lg border border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors;
+  }
+  .btn-danger {
+    @apply px-4 py-2 rounded-lg bg-red-500 text-white text-sm font-medium hover:bg-red-600 transition-colors;
+  }
+  .btn-sm {
+    @apply px-3 py-1 rounded-md border border-gray-300 bg-white text-xs text-gray-700 hover:bg-gray-50 transition-colors;
+  }
+  .btn-sm-danger {
+    @apply px-3 py-1 rounded-md border border-red-200 text-xs text-red-600 hover:bg-red-50 transition-colors;
+  }
+  .card {
+    @apply bg-white rounded-xl shadow-sm overflow-hidden;
+  }
+  .input {
+    @apply w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 transition-colors bg-white;
+  }
+  .select {
+    @apply w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 bg-white transition-colors;
+  }
+}

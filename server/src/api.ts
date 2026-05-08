@@ -58,12 +58,28 @@ app.delete('/api/catalogues/:id', async (c) => {
 // ── Items ────────────────────────────────────────────────────────────────────
 
 app.get('/api/items', async (c) => {
-  const { catalogueId, parentId, since } = c.req.query();
+  const { catalogueId, parentId, since, canContain } = c.req.query();
   let query = db.select().from(item).$dynamic();
-  if (catalogueId) query = query.where(eq(item.catalogueId, catalogueId));
-  if (parentId)    query = query.where(eq(item.parentId, parentId));
-  if (since)       query = query.where(gte(item.lastModified, since));
-  const rows = await query.orderBy(item.itemNumber);
+  if (catalogueId)              query = query.where(eq(item.catalogueId, catalogueId));
+  if (parentId)                 query = query.where(eq(item.parentId, parentId));
+  if (since)                    query = query.where(gte(item.lastModified, since));
+  if (canContain !== undefined) query = query.where(eq(item.canContain, canContain === 'true'));
+  const rows = await query.orderBy(item.name);
+  return c.json(rows);
+});
+
+app.get('/api/search', async (c) => {
+  const q = (c.req.query('q') ?? '').trim();
+  if (!q) return c.json([]);
+  const pattern = `%${q}%`;
+  const rows = await db.select().from(item).where(
+    or(
+      ilike(item.name, pattern),
+      ilike(item.notes, pattern),
+      ilike(item.manufacturer, pattern),
+      ilike(item.model, pattern),
+    )
+  ).orderBy(item.name).limit(100);
   return c.json(rows);
 });
 
