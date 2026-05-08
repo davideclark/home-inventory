@@ -27,7 +27,9 @@ Requirements and data model are documented in Notion (for reference only):
 - **Framework**: Node.js + Hono
 - **Database**: PostgreSQL 16 via Drizzle ORM (`drizzle-orm/postgres-js`)
 - **MCP server**: `@modelcontextprotocol/sdk` — stdio transport, registered in `.claudecode.json` and in Claude Desktop (`%APPDATA%\Claude\claude_desktop_config.json`)
-- **Infrastructure**: Docker Compose (`docker-compose.yml` at repo root)
+- **Infrastructure**: Docker Compose — `docker-compose.yml` (local dev), `docker-compose.prod.yml` (NAS production)
+- **Production deployment**: Synology DS1621+ NAS — `DS1621plus.local`, API on port 3000, postgres on port 5433
+- **Docker image**: `davideclark/home-inventory-api:latest` — multi-platform (amd64, arm64, arm/v7)
 
 ## Common Commands
 
@@ -48,9 +50,22 @@ cd server && npx drizzle-kit generate   # generate migration after schema change
 cd server && npx drizzle-kit migrate    # apply migrations
 ```
 
-**DATABASE_URL**: `postgresql://inventory:inventory_local@localhost:5432/home_inventory`
+**DATABASE_URL (local dev)**: `postgresql://inventory:inventory_local@localhost:5432/home_inventory`
 
-**API URL for sync**: configured in `.env` as `EXPO_PUBLIC_API_URL=http://192.168.1.87:3000` (machine local IP — update if IP changes or when deploying to NAS).
+**DATABASE_URL (NAS / MCP)**: `postgresql://inventory:inventory_local@DS1621plus.local:5433/home_inventory`
+
+**API URL for sync**: configured in `.env` as `EXPO_PUBLIC_API_URL=http://DS1621plus.local:3000`
+
+**To rebuild and push the Docker image** (multi-platform, run from repo root):
+```bash
+docker buildx build --platform linux/amd64,linux/arm64,linux/arm/v7 -t davideclark/home-inventory-api:latest --push ./server
+```
+
+**To deploy/update on NAS** (SSH on port 8888, user: david):
+```bash
+scp -O -P 8888 docker-compose.prod.yml david@DS1621plus.local:/volume1/docker/home-inventory/
+ssh -p 8888 david@DS1621plus.local "cd /volume1/docker/home-inventory && sudo /usr/local/bin/docker compose -f docker-compose.prod.yml pull && sudo /usr/local/bin/docker compose -f docker-compose.prod.yml up -d"
+```
 
 **Always use `npx expo install <pkg>` for Expo ecosystem packages** — it resolves SDK-compatible versions. For React itself, pin to `19.1.0` with `--legacy-peer-deps`.
 

@@ -117,6 +117,33 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
+      name: 'update_catalogue',
+      description: 'Update an existing catalogue by id',
+      inputSchema: {
+        type: 'object',
+        required: ['id'],
+        properties: {
+          id:           { type: 'string' },
+          name:         { type: 'string' },
+          icon:         { type: 'string', description: 'Emoji character' },
+          description:  { type: 'string' },
+          isStructural: { type: 'boolean' },
+          sortOrder:    { type: 'number' },
+        },
+      },
+    },
+    {
+      name: 'delete_catalogue',
+      description: 'Delete a catalogue by id',
+      inputSchema: {
+        type: 'object',
+        required: ['id'],
+        properties: {
+          id: { type: 'string' },
+        },
+      },
+    },
+    {
       name: 'delete_item',
       description: 'Delete an item by id',
       inputSchema: {
@@ -251,6 +278,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           .returning();
         if (!rows[0]) throw new Error('Item not found');
         return text(rows[0]);
+      }
+
+      case 'update_catalogue': {
+        const { id, ...rest } = a;
+        const rows = await db.update(catalogue)
+          .set({ ...rest, lastModified: new Date().toISOString() })
+          .where(eq(catalogue.id, id))
+          .returning();
+        if (!rows[0]) throw new Error('Catalogue not found');
+        return text(rows[0]);
+      }
+
+      case 'delete_catalogue': {
+        await db.delete(catalogue).where(eq(catalogue.id, a.id));
+        return text({ ok: true });
       }
 
       case 'delete_item': {

@@ -32,7 +32,7 @@ export default function ItemListScreen() {
   const { data: items } = useLiveQuery(
     db.select().from(item)
       .where(eq(item.catalogueId, catalogueId))
-      .orderBy(asc(item.itemNumber))
+      .orderBy(asc(item.name))
   );
 
   const { data: containerItems } = useLiveQuery(

@@ -2,13 +2,31 @@ import {
   View, Text, TextInput, StyleSheet, Pressable, Switch,
   ScrollView, Alert, Modal, FlatList,
 } from 'react-native';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useLocalSearchParams, router } from 'expo-router';
 import { asc, eq, and, ne } from 'drizzle-orm';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { db } from '../db';
 import { item, catalogue } from '../schema';
 import { getDeviceId } from '../sync';
+
+function naturalSort(a: string, b: string): number {
+  const re = /(\d+)/g;
+  const ap = a.split(re);
+  const bp = b.split(re);
+  for (let i = 0; i < Math.max(ap.length, bp.length); i++) {
+    const as = ap[i] ?? '';
+    const bs = bp[i] ?? '';
+    if (i % 2 === 1) {
+      const diff = parseInt(as, 10) - parseInt(bs, 10);
+      if (diff !== 0) return diff;
+    } else {
+      const cmp = as.toLowerCase() < bs.toLowerCase() ? -1 : as.toLowerCase() > bs.toLowerCase() ? 1 : 0;
+      if (cmp !== 0) return cmp;
+    }
+  }
+  return 0;
+}
 
 const STATUSES = ['active', 'untested', 'tested', 'faulty', 'stored', 'sold', 'donated', 'lost'] as const;
 type Status = (typeof STATUSES)[number];
@@ -21,11 +39,15 @@ export default function EditItemScreen() {
   );
   const existing = itemData?.[0];
 
-  const { data: containers } = useLiveQuery(
+  const { data: rawContainers } = useLiveQuery(
     db.select({ id: item.id, name: item.name, itemNumber: item.itemNumber })
       .from(item)
       .where(and(eq(item.canContain, true), ne(item.id, itemId)))
-      .orderBy(asc(item.itemNumber))
+  );
+
+  const containers = useMemo(
+    () => [...(rawContainers ?? [])].sort((a, b) => naturalSort(a.name, b.name)),
+    [rawContainers]
   );
 
   const { data: catalogues } = useLiveQuery(

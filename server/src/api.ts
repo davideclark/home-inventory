@@ -1,6 +1,7 @@
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { eq, gte, or, ilike } from 'drizzle-orm';
+import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import { db } from './db';
 import { catalogue, item } from './schema';
 
@@ -124,7 +125,15 @@ app.post('/api/sync/push', async (c) => {
   return c.json({ ok: true, catalogues: cats.length, items: its.length, numbersCleared, skipped });
 });
 
-const port = Number(process.env.PORT ?? 3000);
-serve({ fetch: app.fetch, port }, () => {
-  console.log(`API listening on http://localhost:${port}`);
+async function main() {
+  await migrate(db, { migrationsFolder: './drizzle' });
+  const port = Number(process.env.PORT ?? 3000);
+  serve({ fetch: app.fetch, port }, () => {
+    console.log(`API listening on http://localhost:${port}`);
+  });
+}
+
+main().catch((err) => {
+  console.error('Startup failed:', err);
+  process.exit(1);
 });

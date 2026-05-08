@@ -13,7 +13,7 @@ export default function CataloguesScreen() {
     db.select()
       .from(catalogue)
       .where(eq(catalogue.isStructural, false))
-      .orderBy(asc(catalogue.sortOrder), asc(catalogue.name))
+      .orderBy(asc(catalogue.name))
   );
 
   if (!catalogues) {
