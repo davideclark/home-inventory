@@ -2,8 +2,9 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { eq, or, ilike, isNull } from 'drizzle-orm';
+import { randomUUID } from 'crypto';
 import { db } from './db';
-import { catalogue, item } from './schema';
+import { catalogue, item, syncTombstone } from './schema';
 
 const server = new Server(
   { name: 'inventory', version: '1.0.0' },
@@ -291,11 +292,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'delete_catalogue': {
+        const now = new Date().toISOString();
+        const its = await db.select({ id: item.id }).from(item).where(eq(item.catalogueId, a.id));
+        for (const i of its) {
+          await db.insert(syncTombstone).values({ id: randomUUID(), entityType: 'item', entityId: i.id, deletedAt: now, deviceId: 'mcp' }).onConflictDoNothing();
+          await db.delete(item).where(eq(item.id, i.id));
+        }
+        await db.insert(syncTombstone).values({ id: randomUUID(), entityType: 'catalogue', entityId: a.id, deletedAt: now, deviceId: 'mcp' }).onConflictDoNothing();
         await db.delete(catalogue).where(eq(catalogue.id, a.id));
         return text({ ok: true });
       }
 
       case 'delete_item': {
+        await db.insert(syncTombstone).values({ id: randomUUID(), entityType: 'item', entityId: a.id, deletedAt: new Date().toISOString(), deviceId: 'mcp' }).onConflictDoNothing();
         await db.delete(item).where(eq(item.id, a.id));
         return text({ ok: true });
       }

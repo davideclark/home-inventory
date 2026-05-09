@@ -8,7 +8,7 @@ import { asc, eq, and, ne } from 'drizzle-orm';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { db } from '../db';
 import { item, catalogue } from '../schema';
-import { getDeviceId } from '../sync';
+import { getDeviceId, deleteItem } from '../sync';
 
 function naturalSort(a: string, b: string): number {
   const re = /(\d+)/g;
@@ -180,18 +180,17 @@ export default function EditItemScreen() {
       `Delete "${name}"? This cannot be undone.`,
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: deleteItem },
+        { text: 'Delete', style: 'destructive', onPress: handleDelete },
       ]
     );
   }
 
-  async function deleteItem() {
+  async function handleDelete() {
     try {
-      await db.delete(item).where(eq(item.id, itemId));
+      await deleteItem(itemId);
       router.back();
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      Alert.alert('Cannot delete', msg);
+      Alert.alert('Cannot delete', e instanceof Error ? e.message : String(e));
     }
   }
 

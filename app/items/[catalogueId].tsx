@@ -7,6 +7,7 @@ import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { db } from '../../db';
 import { catalogue, item } from '../../schema';
 import type { Item } from '../../schema';
+import { deleteItem } from '../../sync';
 
 const STATUS_COLOURS: Record<string, string> = {
   active:   '#34c759',
@@ -134,7 +135,7 @@ function ItemRow({ item: i, containerMap }: { item: Item; containerMap: Containe
                   style: 'destructive',
                   onPress: async () => {
                     try {
-                      await db.delete(item).where(eq(item.id, i.id));
+                      await deleteItem(i.id);
                     } catch (e) {
                       const msg = e instanceof Error ? e.message : String(e);
                       Alert.alert('Cannot delete', msg);

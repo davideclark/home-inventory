@@ -98,6 +98,15 @@ export const settings = sqliteTable('settings', {
   value: text('value').notNull(),
 });
 
+export const syncTombstone = sqliteTable('sync_tombstone', {
+  id:         text('id').primaryKey().$defaultFn(() => generateId()),
+  entityType: text('entity_type', { enum: ['catalogue', 'item'] }).notNull(),
+  entityId:   text('entity_id').notNull(),
+  deletedAt:  text('deleted_at').notNull(),
+  deviceId:   text('device_id').notNull(),
+  synced:     integer('synced', { mode: 'boolean' }).notNull().default(false),
+});
+
 export const syncLog = sqliteTable('sync_log', {
   id:         text('id').primaryKey().$defaultFn(() => generateId()),
   entityType: text('entity_type', { enum: ['catalogue', 'item'] }).notNull(),
@@ -137,10 +146,11 @@ export const itemRelations = relations(item, ({ one, many }) => ({
 // Types
 // Inferred TypeScript types for use throughout the app.
 // ---------------------------------------------------------------------------
-export type Catalogue    = typeof catalogue.$inferSelect;
-export type NewCatalogue = typeof catalogue.$inferInsert;
-export type Item         = typeof item.$inferSelect;
-export type NewItem      = typeof item.$inferInsert;
-export type SyncLog      = typeof syncLog.$inferSelect;
-export type NewSyncLog   = typeof syncLog.$inferInsert;
-export type Settings     = typeof settings.$inferSelect;
+export type Catalogue     = typeof catalogue.$inferSelect;
+export type NewCatalogue  = typeof catalogue.$inferInsert;
+export type Item          = typeof item.$inferSelect;
+export type NewItem       = typeof item.$inferInsert;
+export type SyncLog       = typeof syncLog.$inferSelect;
+export type NewSyncLog    = typeof syncLog.$inferInsert;
+export type SyncTombstone = typeof syncTombstone.$inferSelect;
+export type Settings      = typeof settings.$inferSelect;

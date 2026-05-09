@@ -8,6 +8,13 @@
       "when": 1778098389838,
       "tag": "0000_married_payback",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1778329819328,
+      "tag": "0001_powerful_bruce_banner",
+      "breakpoints": true
     }
   ]
 }

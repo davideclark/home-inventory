@@ -2,8 +2,9 @@ import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { eq, gte, or, ilike } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
+import { randomUUID } from 'crypto';
 import { db } from './db';
-import { catalogue, item } from './schema';
+import { catalogue, item, syncTombstone } from './schema';
 
 const API_TOKEN   = process.env.API_TOKEN   ?? '';
 const SERVER_NAME = process.env.SERVER_NAME ?? 'Home Inventory';
@@ -51,7 +52,15 @@ app.put('/api/catalogues/:id', async (c) => {
 });
 
 app.delete('/api/catalogues/:id', async (c) => {
-  await db.delete(catalogue).where(eq(catalogue.id, c.req.param('id')));
+  const id = c.req.param('id');
+  const now = new Date().toISOString();
+  const its = await db.select({ id: item.id }).from(item).where(eq(item.catalogueId, id));
+  for (const i of its) {
+    await db.insert(syncTombstone).values({ id: randomUUID(), entityType: 'item', entityId: i.id, deletedAt: now, deviceId: 'server' }).onConflictDoNothing();
+    await db.delete(item).where(eq(item.id, i.id));
+  }
+  await db.insert(syncTombstone).values({ id: randomUUID(), entityType: 'catalogue', entityId: id, deletedAt: now, deviceId: 'server' }).onConflictDoNothing();
+  await db.delete(catalogue).where(eq(catalogue.id, id));
   return c.json({ ok: true });
 });
 
@@ -104,7 +113,9 @@ app.put('/api/items/:id', async (c) => {
 });
 
 app.delete('/api/items/:id', async (c) => {
-  await db.delete(item).where(eq(item.id, c.req.param('id')));
+  const id = c.req.param('id');
+  await db.insert(syncTombstone).values({ id: randomUUID(), entityType: 'item', entityId: id, deletedAt: new Date().toISOString(), deviceId: 'server' }).onConflictDoNothing();
+  await db.delete(item).where(eq(item.id, id));
   return c.json({ ok: true });
 });
 
@@ -112,17 +123,34 @@ app.delete('/api/items/:id', async (c) => {
 
 app.get('/api/sync/pull', async (c) => {
   const since = c.req.query('since') ?? '1970-01-01T00:00:00Z';
-  const [catalogues, items] = await Promise.all([
+  const [catalogues, items, tombstones] = await Promise.all([
     db.select().from(catalogue).where(gte(catalogue.lastModified, since)),
     db.select().from(item).where(gte(item.lastModified, since)),
+    db.select().from(syncTombstone).where(gte(syncTombstone.deletedAt, since)),
   ]);
-  return c.json({ catalogues, items });
+  return c.json({ catalogues, items, tombstones });
 });
 
 app.post('/api/sync/push', async (c) => {
-  const { catalogues: cats = [], items: its = [] } = await c.req.json();
+  const { catalogues: cats = [], items: its = [], tombstones: tombstonesIn = [] } = await c.req.json();
+
+  // Process tombstones first; track IDs to skip upserts for deleted entities
+  const tombstonedItemIds = new Set<string>();
+  const tombstonedCatIds = new Set<string>();
+  for (const t of tombstonesIn) {
+    await db.insert(syncTombstone).values(t).onConflictDoNothing();
+    if (t.entityType === 'item') {
+      await db.delete(item).where(eq(item.id, t.entityId));
+      tombstonedItemIds.add(t.entityId);
+    } else if (t.entityType === 'catalogue') {
+      await db.update(item).set({ catalogueId: null }).where(eq(item.catalogueId, t.entityId));
+      await db.delete(catalogue).where(eq(catalogue.id, t.entityId));
+      tombstonedCatIds.add(t.entityId);
+    }
+  }
 
   for (const { id: catId, ...catRest } of cats) {
+    if (tombstonedCatIds.has(catId)) continue;
     await db.insert(catalogue).values({ id: catId, ...catRest })
       .onConflictDoUpdate({ target: catalogue.id, set: catRest });
   }
@@ -130,6 +158,7 @@ app.post('/api/sync/push', async (c) => {
   const numbersCleared: number[] = [];
   const skipped: string[] = [];
   for (const { id: itemId, ...itemRest } of its) {
+    if (tombstonedItemIds.has(itemId)) continue;
     try {
       await db.insert(item).values({ id: itemId, ...itemRest })
         .onConflictDoUpdate({ target: item.id, set: itemRest });
@@ -137,12 +166,10 @@ app.post('/api/sync/push', async (c) => {
       const code = err.cause?.code;
       const constraint = err.cause?.constraint_name;
       if (code === '23505' && constraint === 'item_item_number_unique') {
-        // item_number clash — push without it
         if (itemRest.itemNumber != null) numbersCleared.push(itemRest.itemNumber);
         await db.insert(item).values({ id: itemId, ...itemRest, itemNumber: null })
           .onConflictDoUpdate({ target: item.id, set: { ...itemRest, itemNumber: null } });
       } else if (code === '23503' && constraint === 'item_catalogue_id_catalogue_id_fk') {
-        // catalogue doesn't exist on server — push without catalogueId
         await db.insert(item).values({ id: itemId, ...itemRest, catalogueId: null })
           .onConflictDoUpdate({ target: item.id, set: { ...itemRest, catalogueId: null } });
         skipped.push(itemId);
@@ -152,7 +179,7 @@ app.post('/api/sync/push', async (c) => {
     }
   }
 
-  return c.json({ ok: true, catalogues: cats.length, items: its.length, numbersCleared, skipped });
+  return c.json({ ok: true, catalogues: cats.length, items: its.length, tombstones: tombstonesIn.length, numbersCleared, skipped });
 });
 
 async function main() {

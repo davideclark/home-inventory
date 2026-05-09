@@ -6,6 +6,7 @@ import { eq } from 'drizzle-orm';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { db } from '../../db';
 import { item, catalogue } from '../../schema';
+import { deleteItem } from '../../sync';
 
 const STATUS_COLOURS: Record<string, string> = {
   active:   '#34c759',
@@ -196,7 +197,7 @@ function ContainerRow({ child: c, containerMap }: { child: Child; containerMap: 
             Alert.alert('Delete Container', `Delete "${c.name}"? This cannot be undone.`, [
               { text: 'Cancel', style: 'cancel' },
               { text: 'Delete', style: 'destructive', onPress: async () => {
-                try { await db.delete(item).where(eq(item.id, c.id)); }
+                try { await deleteItem(c.id); }
                 catch (e) { Alert.alert('Cannot delete', e instanceof Error ? e.message : String(e)); }
               }},
             ]);
@@ -248,7 +249,7 @@ function ItemRow({ child: i, containerMap }: { child: Child; containerMap: Conta
             Alert.alert('Delete Item', `Delete "${i.name}"? This cannot be undone.`, [
               { text: 'Cancel', style: 'cancel' },
               { text: 'Delete', style: 'destructive', onPress: async () => {
-                try { await db.delete(item).where(eq(item.id, i.id)); }
+                try { await deleteItem(i.id); }
                 catch (e) { Alert.alert('Cannot delete', e instanceof Error ? e.message : String(e)); }
               }},
             ]);

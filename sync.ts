@@ -1,6 +1,6 @@
 import { eq, sql } from 'drizzle-orm';
 import { db } from './db';
-import { catalogue, item, settings } from './schema';
+import { catalogue, item, settings, syncTombstone } from './schema';
 
 function isoNow(): string {
   return new Date().toISOString();
@@ -70,10 +70,47 @@ export async function getLastSyncAt(): Promise<string | null> {
   return getSetting('last_sync_at');
 }
 
+export async function deleteItem(id: string): Promise<void> {
+  const deviceId = await getDeviceId();
+  await db.delete(item).where(eq(item.id, id));
+  await db.insert(syncTombstone).values({
+    entityType: 'item',
+    entityId: id,
+    deletedAt: new Date().toISOString(),
+    deviceId,
+    synced: false,
+  });
+}
+
+export async function deleteCatalogue(id: string): Promise<void> {
+  const deviceId = await getDeviceId();
+  const now = new Date().toISOString();
+  const catalogueItems = await db.select({ id: item.id }).from(item).where(eq(item.catalogueId, id));
+  for (const i of catalogueItems) {
+    await db.delete(item).where(eq(item.id, i.id));
+    await db.insert(syncTombstone).values({
+      entityType: 'item',
+      entityId: i.id,
+      deletedAt: now,
+      deviceId,
+      synced: false,
+    });
+  }
+  await db.delete(catalogue).where(eq(catalogue.id, id));
+  await db.insert(syncTombstone).values({
+    entityType: 'catalogue',
+    entityId: id,
+    deletedAt: now,
+    deviceId,
+    synced: false,
+  });
+}
+
 interface PushResult {
   pushed: number;
   pushedItemIds: Set<string>;
   pushedCatIds: Set<string>;
+  pushedTombstoneIds: Set<string>;
 }
 
 async function push(): Promise<PushResult> {
@@ -87,13 +124,14 @@ async function push(): Promise<PushResult> {
           AND catalogue_id NOT IN (SELECT id FROM catalogue)`
   );
 
-  const [unsyncedCats, unsyncedItems] = await Promise.all([
+  const [unsyncedCats, unsyncedItems, unsyncedTombstones] = await Promise.all([
     db.select().from(catalogue).where(eq(catalogue.synced, false)),
     db.select().from(item).where(eq(item.synced, false)),
+    db.select().from(syncTombstone).where(eq(syncTombstone.synced, false)),
   ]);
 
-  if (!unsyncedCats.length && !unsyncedItems.length) {
-    return { pushed: 0, pushedItemIds: new Set(), pushedCatIds: new Set() };
+  if (!unsyncedCats.length && !unsyncedItems.length && !unsyncedTombstones.length) {
+    return { pushed: 0, pushedItemIds: new Set(), pushedCatIds: new Set(), pushedTombstoneIds: new Set() };
   }
 
   const apiUrl = await getApiUrl();
@@ -108,6 +146,7 @@ async function push(): Promise<PushResult> {
         deviceId,
         lastModified: now,
       })),
+      tombstones: unsyncedTombstones,
     }),
   });
 
@@ -120,12 +159,16 @@ async function push(): Promise<PushResult> {
     ...unsyncedItems.map(i =>
       db.update(item).set({ synced: true, lastModified: now }).where(eq(item.id, i.id))
     ),
+    ...unsyncedTombstones.map(t =>
+      db.update(syncTombstone).set({ synced: true }).where(eq(syncTombstone.id, t.id))
+    ),
   ]);
 
   return {
-    pushed: unsyncedCats.length + unsyncedItems.length,
+    pushed: unsyncedCats.length + unsyncedItems.length + unsyncedTombstones.length,
     pushedItemIds: new Set(unsyncedItems.map(i => i.id)),
     pushedCatIds: new Set(unsyncedCats.map(c => c.id)),
+    pushedTombstoneIds: new Set(unsyncedTombstones.map(t => t.id)),
   };
 }
 
@@ -133,6 +176,7 @@ async function pull(
   since: string,
   skipItemIds: Set<string> = new Set(),
   skipCatIds: Set<string> = new Set(),
+  skipTombstoneIds: Set<string> = new Set(),
 ): Promise<number> {
   const apiUrl = await getApiUrl();
   const res = await fetch(`${apiUrl}/api/sync/pull?since=${encodeURIComponent(since)}`, {
@@ -140,11 +184,27 @@ async function pull(
   });
   if (!res.ok) throw new Error(`Pull failed: ${res.status}`);
 
-  const { catalogues: serverCats = [], items: serverItems = [] } = await res.json();
+  const { catalogues: serverCats = [], items: serverItems = [], tombstones: serverTombstones = [] } = await res.json();
   let count = 0;
 
+  // Apply tombstones first; collect IDs to skip when processing items/catalogues
+  const tombstonedItemIds = new Set<string>();
+  const tombstonedCatIds = new Set<string>();
+  for (const t of serverTombstones) {
+    if (skipTombstoneIds.has(t.id)) continue;
+    if (t.entityType === 'item') {
+      await db.delete(item).where(eq(item.id, t.entityId));
+      tombstonedItemIds.add(t.entityId);
+    } else if (t.entityType === 'catalogue') {
+      await db.delete(catalogue).where(eq(catalogue.id, t.entityId));
+      tombstonedCatIds.add(t.entityId);
+    }
+    await db.insert(syncTombstone).values({ ...t, synced: true }).onConflictDoNothing();
+    count++;
+  }
+
   for (const sc of serverCats) {
-    if (skipCatIds.has(sc.id)) continue;
+    if (skipCatIds.has(sc.id) || tombstonedCatIds.has(sc.id)) continue;
     const [existing] = await db.select().from(catalogue).where(eq(catalogue.id, sc.id)).limit(1);
     if (existing) {
       if (toMs(sc.lastModified) >= toMs(existing.lastModified)) {
@@ -158,7 +218,7 @@ async function pull(
   }
 
   for (const si of serverItems) {
-    if (skipItemIds.has(si.id)) continue;
+    if (skipItemIds.has(si.id) || tombstonedItemIds.has(si.id)) continue;
     const mapped = {
       ...si,
       spec: si.spec != null ? JSON.stringify(si.spec) : null,
@@ -181,8 +241,8 @@ async function pull(
 
 export async function sync(): Promise<{ pushed: number; pulled: number }> {
   const since = (await getLastSyncAt()) ?? '1970-01-01T00:00:00Z';
-  const { pushed, pushedItemIds, pushedCatIds } = await push();
-  const pulled = await pull(since, pushedItemIds, pushedCatIds);
+  const { pushed, pushedItemIds, pushedCatIds, pushedTombstoneIds } = await push();
+  const pulled = await pull(since, pushedItemIds, pushedCatIds, pushedTombstoneIds);
   await setSetting('last_sync_at', isoNow());
   return { pushed, pulled };
 }

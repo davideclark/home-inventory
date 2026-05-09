@@ -8,6 +8,7 @@ import { eq } from 'drizzle-orm';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { db } from '../../db';
 import { catalogue } from '../../schema';
+import { deleteCatalogue } from '../../sync';
 
 export default function EditCatalogueScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -66,22 +67,17 @@ export default function EditCatalogueScreen() {
       `Delete "${name}"? This cannot be undone.`,
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: deleteCatalogue },
+        { text: 'Delete', style: 'destructive', onPress: handleDelete },
       ]
     );
   }
 
-  async function deleteCatalogue() {
+  async function handleDelete() {
     try {
-      await db.delete(catalogue).where(eq(catalogue.id, id));
+      await deleteCatalogue(id);
       router.back();
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      // FK violation means items exist in this catalogue
-      const friendly = msg.includes('FOREIGN KEY') || msg.includes('foreign key')
-        ? 'This catalogue still has items. Remove all items first.'
-        : msg;
-      Alert.alert('Cannot delete', friendly);
+      Alert.alert('Cannot delete', e instanceof Error ? e.message : String(e));
     }
   }
 

@@ -43,6 +43,14 @@ export const item = pgTable('item', {
   parentRequired: check('chk_parent_required', sql`${table.canContain} = true OR ${table.parentId} IS NOT NULL`),
 }));
 
+export const syncTombstone = pgTable('sync_tombstone', {
+  id:         text('id').primaryKey(),
+  entityType: text('entity_type').notNull(),
+  entityId:   text('entity_id').notNull(),
+  deletedAt:  text('deleted_at').notNull(),
+  deviceId:   text('device_id').notNull(),
+});
+
 export const syncLog = pgTable('sync_log', {
   id:         uuid('id').primaryKey().defaultRandom(),
   entityType: text('entity_type').notNull(),

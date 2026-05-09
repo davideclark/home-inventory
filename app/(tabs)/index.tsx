@@ -7,6 +7,7 @@ import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { db } from '../../db';
 import { catalogue } from '../../schema';
 import type { Catalogue } from '../../schema';
+import { deleteCatalogue } from '../../sync';
 
 export default function CataloguesScreen() {
   const { data: catalogues } = useLiveQuery(
@@ -73,14 +74,9 @@ function CatalogueRow({ catalogue: cat }: { catalogue: Catalogue }) {
                   style: 'destructive',
                   onPress: async () => {
                     try {
-                      await db.delete(catalogue).where(eq(catalogue.id, cat.id));
+                      await deleteCatalogue(cat.id);
                     } catch (e) {
-                      const msg = e instanceof Error ? e.message : String(e);
-                      const friendly =
-                        msg.includes('FOREIGN KEY') || msg.includes('foreign key')
-                          ? 'This catalogue still has items. Remove all items first.'
-                          : msg;
-                      Alert.alert('Cannot delete', friendly);
+                      Alert.alert('Cannot delete', e instanceof Error ? e.message : String(e));
                     }
                   },
                 },
