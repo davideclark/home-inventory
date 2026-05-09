@@ -30,7 +30,13 @@ export const api = {
     get:    <T = unknown>(id: string) => req<T>(`items/${id}`),
     create: <T = unknown>(data: unknown) => req<T>('items', { method: 'POST', body: JSON.stringify(data) }),
     update: <T = unknown>(id: string, data: unknown) => req<T>(`items/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-    delete: (id: string) => req(`items/${id}`, { method: 'DELETE' }),
+    delete: (id: string, options?: { cascade?: boolean; moveUp?: boolean }) => {
+      const params = new URLSearchParams();
+      if (options?.cascade) params.set('cascade', 'true');
+      if (options?.moveUp)  params.set('moveUp',  'true');
+      const qs = params.toString() ? `?${params}` : '';
+      return req(`items/${id}${qs}`, { method: 'DELETE' });
+    },
   },
   search: <T = unknown>(q: string) => req<T>(`search?q=${encodeURIComponent(q)}`),
 };

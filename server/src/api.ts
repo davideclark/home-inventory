@@ -119,7 +119,38 @@ app.put('/api/items/:id', async (c) => {
 
 app.delete('/api/items/:id', async (c) => {
   const id = c.req.param('id');
-  await db.insert(syncTombstone).values({ id: randomUUID(), entityType: 'item', entityId: id, deletedAt: new Date().toISOString(), deviceId: 'server' }).onConflictDoNothing();
+  const cascade = c.req.query('cascade') === 'true';
+  const moveUp  = c.req.query('moveUp')  === 'true';
+  const now = new Date().toISOString();
+
+  if (cascade) {
+    const queue = [id];
+    while (queue.length > 0) {
+      const parentId = queue.shift()!;
+      const children = await db.select({ id: item.id, canContain: item.canContain })
+        .from(item).where(eq(item.parentId, parentId));
+      for (const child of children) {
+        if (child.canContain) queue.push(child.id);
+        await db.insert(syncTombstone).values({ id: randomUUID(), entityType: 'item', entityId: child.id, deletedAt: now, deviceId: 'server' }).onConflictDoNothing();
+        await db.delete(item).where(eq(item.id, child.id));
+      }
+    }
+  } else if (moveUp) {
+    const [container] = await db.select({ parentId: item.parentId }).from(item).where(eq(item.id, id)).limit(1);
+    const targetParentId = container?.parentId ?? null;
+    const directChildren = await db.select({ id: item.id, canContain: item.canContain })
+      .from(item).where(eq(item.parentId, id));
+    for (const child of directChildren) {
+      if (child.canContain || targetParentId !== null) {
+        await db.update(item).set({ parentId: targetParentId, lastModified: now }).where(eq(item.id, child.id));
+      } else {
+        await db.insert(syncTombstone).values({ id: randomUUID(), entityType: 'item', entityId: child.id, deletedAt: now, deviceId: 'server' }).onConflictDoNothing();
+        await db.delete(item).where(eq(item.id, child.id));
+      }
+    }
+  }
+
+  await db.insert(syncTombstone).values({ id: randomUUID(), entityType: 'item', entityId: id, deletedAt: now, deviceId: 'server' }).onConflictDoNothing();
   await db.delete(item).where(eq(item.id, id));
   return c.json({ ok: true });
 });

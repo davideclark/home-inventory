@@ -41,6 +41,9 @@ export default function ContainerPage() {
   const [addOpen, setAddOpen]     = useState(false);
   const [editItem, setEditItem]   = useState<Item | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [deleteContainerTarget, setDeleteContainerTarget] = useState<{
+    id: string; name: string; childCount: number; hasNonContainerChildren: boolean; parentId: string | null;
+  } | null>(null);
 
   function afterSave() {
     qc.invalidateQueries({ queryKey: ['container-children', id] });
@@ -49,11 +52,33 @@ export default function ContainerPage() {
     setEditItem(null);
   }
 
-  async function deleteItem(itemId: string) {
+  async function deleteLeafItem(itemId: string) {
     await api.items.delete(itemId);
     qc.invalidateQueries({ queryKey: ['container-children', id] });
     qc.invalidateQueries({ queryKey: ['containers'] });
     setConfirmId(null);
+  }
+
+  async function handleContainerDeleteClick(container: Item) {
+    const children = await api.items.list<Item[]>({ parentId: container.id });
+    setDeleteContainerTarget({
+      id: container.id,
+      name: container.name,
+      childCount: children.length,
+      hasNonContainerChildren: children.some(c => !c.canContain),
+      parentId: container.parentId ?? null,
+    });
+  }
+
+  async function confirmContainerDelete(mode: 'cascade' | 'moveUp') {
+    if (!deleteContainerTarget) return;
+    await api.items.delete(deleteContainerTarget.id, {
+      cascade: mode === 'cascade',
+      moveUp:  mode === 'moveUp',
+    });
+    qc.invalidateQueries({ queryKey: ['container-children', id] });
+    qc.invalidateQueries({ queryKey: ['containers'] });
+    setDeleteContainerTarget(null);
   }
 
   function itemNum(it: Item) {
@@ -90,13 +115,16 @@ export default function ContainerPage() {
               <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Containers</h2>
               <div className="card divide-y divide-gray-100">
                 {subContainers.map(c => (
-                  <Link key={c.id} href={`/containers/${c.id}`}
-                    className="flex items-center px-4 py-3 gap-3 hover:bg-gray-50 group"
-                  >
+                  <div key={c.id} className="flex items-center px-4 py-3 gap-3 hover:bg-gray-50 group">
                     <span className="text-lg">📦</span>
-                    <span className="flex-1 font-medium text-sm">{c.name}</span>
-                    <span className="text-gray-300 group-hover:text-gray-400">›</span>
-                  </Link>
+                    <Link href={`/containers/${c.id}`} className="flex-1 font-medium text-sm hover:text-blue-500">
+                      {c.name}
+                    </Link>
+                    <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => handleContainerDeleteClick(c)} className="btn-sm-danger">Delete</button>
+                    </div>
+                    <Link href={`/containers/${c.id}`} className="text-gray-300 group-hover:text-gray-400">›</Link>
+                  </div>
                 ))}
               </div>
             </div>
@@ -128,6 +156,7 @@ export default function ContainerPage() {
                           <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity justify-end">
                             <button onClick={() => setEditItem(it)} className="btn-sm">Edit</button>
                             <button onClick={() => setConfirmId(it.id)} className="btn-sm-danger">Delete</button>
+
                           </div>
                         </td>
                       </tr>
@@ -153,10 +182,32 @@ export default function ContainerPage() {
       {confirmId && (
         <ConfirmDialog
           message="Delete this item? This cannot be undone."
-          onConfirm={() => deleteItem(confirmId)}
+          onConfirm={() => deleteLeafItem(confirmId)}
           onCancel={() => setConfirmId(null)}
         />
       )}
+
+      {deleteContainerTarget && (() => {
+        const { childCount, hasNonContainerChildren, parentId } = deleteContainerTarget;
+        const canMoveUp = parentId !== null || !hasNonContainerChildren;
+        return (
+          <ConfirmDialog
+            message={
+              childCount === 0
+                ? `Delete "${deleteContainerTarget.name}"? This cannot be undone.`
+                : canMoveUp
+                  ? `"${deleteContainerTarget.name}" contains ${childCount} item${childCount === 1 ? '' : 's'}. Move them to the parent container, or delete everything?`
+                  : `"${deleteContainerTarget.name}" contains ${childCount} item${childCount === 1 ? '' : 's'}. It has no parent, so all contents must be deleted too.`
+            }
+            confirmLabel="Delete All"
+            secondaryAction={childCount > 0 && canMoveUp
+              ? { label: 'Move Contents Up', onClick: () => confirmContainerDelete('moveUp') }
+              : undefined}
+            onConfirm={() => confirmContainerDelete('cascade')}
+            onCancel={() => setDeleteContainerTarget(null)}
+          />
+        );
+      })()}
     </div>
   );
 }
