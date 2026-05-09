@@ -17,6 +17,7 @@ android/
 *.db-shm
 *.db-wal
 *.sql
+!drizzle/*.sql
 
 # ML models (large binary files)
 models/
