@@ -3,7 +3,7 @@ import { db } from './db';
 import { catalogue, item, settings } from './schema';
 
 function isoNow(): string {
-  return new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+  return new Date().toISOString();
 }
 
 function toMs(ts: string): number {
@@ -70,7 +70,13 @@ export async function getLastSyncAt(): Promise<string | null> {
   return getSetting('last_sync_at');
 }
 
-async function push(): Promise<number> {
+interface PushResult {
+  pushed: number;
+  pushedItemIds: Set<string>;
+  pushedCatIds: Set<string>;
+}
+
+async function push(): Promise<PushResult> {
   const deviceId = await getDeviceId();
   const now = isoNow();
 
@@ -86,7 +92,9 @@ async function push(): Promise<number> {
     db.select().from(item).where(eq(item.synced, false)),
   ]);
 
-  if (!unsyncedCats.length && !unsyncedItems.length) return 0;
+  if (!unsyncedCats.length && !unsyncedItems.length) {
+    return { pushed: 0, pushedItemIds: new Set(), pushedCatIds: new Set() };
+  }
 
   const apiUrl = await getApiUrl();
   const res = await fetch(`${apiUrl}/api/sync/push`, {
@@ -114,10 +122,18 @@ async function push(): Promise<number> {
     ),
   ]);
 
-  return unsyncedCats.length + unsyncedItems.length;
+  return {
+    pushed: unsyncedCats.length + unsyncedItems.length,
+    pushedItemIds: new Set(unsyncedItems.map(i => i.id)),
+    pushedCatIds: new Set(unsyncedCats.map(c => c.id)),
+  };
 }
 
-async function pull(since: string): Promise<number> {
+async function pull(
+  since: string,
+  skipItemIds: Set<string> = new Set(),
+  skipCatIds: Set<string> = new Set(),
+): Promise<number> {
   const apiUrl = await getApiUrl();
   const res = await fetch(`${apiUrl}/api/sync/pull?since=${encodeURIComponent(since)}`, {
     headers: await authHeaders(),
@@ -125,19 +141,24 @@ async function pull(since: string): Promise<number> {
   if (!res.ok) throw new Error(`Pull failed: ${res.status}`);
 
   const { catalogues: serverCats = [], items: serverItems = [] } = await res.json();
+  let count = 0;
 
   for (const sc of serverCats) {
+    if (skipCatIds.has(sc.id)) continue;
     const [existing] = await db.select().from(catalogue).where(eq(catalogue.id, sc.id)).limit(1);
     if (existing) {
       if (toMs(sc.lastModified) >= toMs(existing.lastModified)) {
         await db.update(catalogue).set({ ...sc, synced: true }).where(eq(catalogue.id, sc.id));
+        count++;
       }
     } else {
       await db.insert(catalogue).values({ ...sc, synced: true }).onConflictDoNothing();
+      count++;
     }
   }
 
   for (const si of serverItems) {
+    if (skipItemIds.has(si.id)) continue;
     const mapped = {
       ...si,
       spec: si.spec != null ? JSON.stringify(si.spec) : null,
@@ -147,19 +168,21 @@ async function pull(since: string): Promise<number> {
     if (existing) {
       if (toMs(si.lastModified) >= toMs(existing.lastModified)) {
         await db.update(item).set(mapped).where(eq(item.id, si.id));
+        count++;
       }
     } else {
       await db.insert(item).values(mapped).onConflictDoNothing();
+      count++;
     }
   }
 
-  return serverCats.length + serverItems.length;
+  return count;
 }
 
 export async function sync(): Promise<{ pushed: number; pulled: number }> {
   const since = (await getLastSyncAt()) ?? '1970-01-01T00:00:00Z';
-  const pushed = await push();
-  const pulled = await pull(since);
+  const { pushed, pushedItemIds, pushedCatIds } = await push();
+  const pulled = await pull(since, pushedItemIds, pushedCatIds);
   await setSetting('last_sync_at', isoNow());
   return { pushed, pulled };
 }
