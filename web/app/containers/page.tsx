@@ -1,10 +1,13 @@
 'use client';
-import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
+import ConfirmDialog from '../../components/ConfirmDialog';
 import { api } from '../../lib/api';
 import type { Item } from '../../lib/types';
 
 export default function ContainersPage() {
+  const qc = useQueryClient();
   const { data: allContainers = [], isLoading } = useQuery({
     queryKey: ['containers'],
     queryFn: () => api.items.list<Item[]>({ canContain: 'true' }),
@@ -14,7 +17,31 @@ export default function ContainersPage() {
     .filter(c => !c.parentId)
     .sort((a, b) => a.name.localeCompare(b.name));
 
-  const childCount = (id: string) => allContainers.filter(c => c.parentId === id).length;
+  const subContainerCount = (id: string) => allContainers.filter(c => c.parentId === id).length;
+
+  const [deleteTarget, setDeleteTarget] = useState<{
+    id: string; name: string; childCount: number; hasNonContainerChildren: boolean;
+  } | null>(null);
+
+  async function handleDeleteClick(container: Item) {
+    const children = await api.items.list<Item[]>({ parentId: container.id });
+    setDeleteTarget({
+      id: container.id,
+      name: container.name,
+      childCount: children.length,
+      hasNonContainerChildren: children.some(c => !c.canContain),
+    });
+  }
+
+  async function confirmDelete(mode: 'cascade' | 'moveUp') {
+    if (!deleteTarget) return;
+    await api.items.delete(deleteTarget.id, {
+      cascade: mode === 'cascade',
+      moveUp:  mode === 'moveUp',
+    });
+    qc.invalidateQueries({ queryKey: ['containers'] });
+    setDeleteTarget(null);
+  }
 
   return (
     <div>
@@ -27,21 +54,44 @@ export default function ContainersPage() {
       ) : (
         <div className="card divide-y divide-gray-100">
           {roots.map(c => (
-            <Link key={c.id} href={`/containers/${c.id}`}
-              className="flex items-center px-4 py-3 gap-3 hover:bg-gray-50 group"
-            >
+            <div key={c.id} className="flex items-center px-4 py-3 gap-3 hover:bg-gray-50 group">
               <span className="text-xl">📦</span>
-              <div className="flex-1">
+              <Link href={`/containers/${c.id}`} className="flex-1 hover:text-blue-500">
                 <div className="font-medium text-sm">{c.name}</div>
-                {childCount(c.id) > 0 && (
-                  <div className="text-xs text-gray-400">{childCount(c.id)} sub-containers</div>
+                {subContainerCount(c.id) > 0 && (
+                  <div className="text-xs text-gray-400">{subContainerCount(c.id)} sub-containers</div>
                 )}
+              </Link>
+              <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button onClick={() => handleDeleteClick(c)} className="btn-sm-danger">Delete</button>
               </div>
-              <span className="text-gray-300 group-hover:text-gray-400">›</span>
-            </Link>
+              <Link href={`/containers/${c.id}`} className="text-gray-300 group-hover:text-gray-400">›</Link>
+            </div>
           ))}
         </div>
       )}
+
+      {deleteTarget && (() => {
+        // Root containers have no parent — can only move up sub-containers (canContain=true)
+        const canMoveUp = !deleteTarget.hasNonContainerChildren;
+        return (
+          <ConfirmDialog
+            message={
+              deleteTarget.childCount === 0
+                ? `Delete "${deleteTarget.name}"? This cannot be undone.`
+                : canMoveUp
+                  ? `"${deleteTarget.name}" contains ${deleteTarget.childCount} item${deleteTarget.childCount === 1 ? '' : 's'}. Move sub-containers to root, or delete everything?`
+                  : `"${deleteTarget.name}" contains ${deleteTarget.childCount} item${deleteTarget.childCount === 1 ? '' : 's'}. Some items have no parent to move to, so all contents must be deleted.`
+            }
+            confirmLabel="Delete All"
+            secondaryAction={deleteTarget.childCount > 0 && canMoveUp
+              ? { label: 'Move Contents Up', onClick: () => confirmDelete('moveUp') }
+              : undefined}
+            onConfirm={() => confirmDelete('cascade')}
+            onCancel={() => setDeleteTarget(null)}
+          />
+        );
+      })()}
     </div>
   );
 }
