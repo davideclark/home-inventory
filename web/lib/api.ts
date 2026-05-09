@@ -18,7 +18,7 @@ export const api = {
     get:    <T = unknown>(id: string) => req<T>(`catalogues/${id}`),
     create: <T = unknown>(data: unknown) => req<T>('catalogues', { method: 'POST', body: JSON.stringify(data) }),
     update: <T = unknown>(id: string, data: unknown) => req<T>(`catalogues/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-    delete: (id: string) => req(`catalogues/${id}`, { method: 'DELETE' }),
+    delete: (id: string, keepItems?: boolean) => req(`catalogues/${id}${keepItems ? '?keepItems=true' : ''}`, { method: 'DELETE' }),
   },
   items: {
     list: <T = unknown>(params?: Record<string, string>) => {

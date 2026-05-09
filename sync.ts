@@ -82,19 +82,67 @@ export async function deleteItem(id: string): Promise<void> {
   });
 }
 
-export async function deleteCatalogue(id: string): Promise<void> {
+export async function deleteContainer(id: string, options: { cascade?: boolean } = {}): Promise<void> {
+  const { cascade = true } = options;
+  const deviceId = await getDeviceId();
+  const now = new Date().toISOString();
+
+  if (cascade) {
+    // BFS to collect all descendants, deepest first isn't required — tombstones handle ordering
+    const queue = [id];
+    while (queue.length > 0) {
+      const parentId = queue.shift()!;
+      const children = await db.select({ id: item.id, canContain: item.canContain })
+        .from(item).where(eq(item.parentId, parentId));
+      for (const child of children) {
+        if (child.canContain) queue.push(child.id);
+        await db.delete(item).where(eq(item.id, child.id));
+        await db.insert(syncTombstone).values({ entityType: 'item', entityId: child.id, deletedAt: now, deviceId, synced: false });
+      }
+    }
+  } else {
+    // Move direct children up to the container's parent
+    const [container] = await db.select({ parentId: item.parentId }).from(item).where(eq(item.id, id)).limit(1);
+    const targetParentId = container?.parentId ?? null;
+    const directChildren = await db.select({ id: item.id, canContain: item.canContain })
+      .from(item).where(eq(item.parentId, id));
+    for (const child of directChildren) {
+      if (child.canContain || targetParentId !== null) {
+        await db.update(item)
+          .set({ parentId: targetParentId, lastModified: now, synced: false })
+          .where(eq(item.id, child.id));
+      } else {
+        // Non-container item with nowhere to go — delete it
+        await db.delete(item).where(eq(item.id, child.id));
+        await db.insert(syncTombstone).values({ entityType: 'item', entityId: child.id, deletedAt: now, deviceId, synced: false });
+      }
+    }
+  }
+
+  await db.delete(item).where(eq(item.id, id));
+  await db.insert(syncTombstone).values({ entityType: 'item', entityId: id, deletedAt: now, deviceId, synced: false });
+}
+
+export async function deleteCatalogue(id: string, options: { deleteItems?: boolean } = {}): Promise<void> {
+  const { deleteItems = true } = options;
   const deviceId = await getDeviceId();
   const now = new Date().toISOString();
   const catalogueItems = await db.select({ id: item.id }).from(item).where(eq(item.catalogueId, id));
-  for (const i of catalogueItems) {
-    await db.delete(item).where(eq(item.id, i.id));
-    await db.insert(syncTombstone).values({
-      entityType: 'item',
-      entityId: i.id,
-      deletedAt: now,
-      deviceId,
-      synced: false,
-    });
+  if (deleteItems) {
+    for (const i of catalogueItems) {
+      await db.delete(item).where(eq(item.id, i.id));
+      await db.insert(syncTombstone).values({
+        entityType: 'item',
+        entityId: i.id,
+        deletedAt: now,
+        deviceId,
+        synced: false,
+      });
+    }
+  } else if (catalogueItems.length > 0) {
+    await db.update(item)
+      .set({ catalogueId: null, lastModified: now, synced: false })
+      .where(eq(item.catalogueId, id));
   }
   await db.delete(catalogue).where(eq(catalogue.id, id));
   await db.insert(syncTombstone).values({

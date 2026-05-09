@@ -53,11 +53,16 @@ app.put('/api/catalogues/:id', async (c) => {
 
 app.delete('/api/catalogues/:id', async (c) => {
   const id = c.req.param('id');
+  const keepItems = c.req.query('keepItems') === 'true';
   const now = new Date().toISOString();
-  const its = await db.select({ id: item.id }).from(item).where(eq(item.catalogueId, id));
-  for (const i of its) {
-    await db.insert(syncTombstone).values({ id: randomUUID(), entityType: 'item', entityId: i.id, deletedAt: now, deviceId: 'server' }).onConflictDoNothing();
-    await db.delete(item).where(eq(item.id, i.id));
+  if (keepItems) {
+    await db.update(item).set({ catalogueId: null, lastModified: now }).where(eq(item.catalogueId, id));
+  } else {
+    const its = await db.select({ id: item.id }).from(item).where(eq(item.catalogueId, id));
+    for (const i of its) {
+      await db.insert(syncTombstone).values({ id: randomUUID(), entityType: 'item', entityId: i.id, deletedAt: now, deviceId: 'server' }).onConflictDoNothing();
+      await db.delete(item).where(eq(item.id, i.id));
+    }
   }
   await db.insert(syncTombstone).values({ id: randomUUID(), entityType: 'catalogue', entityId: id, deletedAt: now, deviceId: 'server' }).onConflictDoNothing();
   await db.delete(catalogue).where(eq(catalogue.id, id));

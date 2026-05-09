@@ -5,7 +5,7 @@ import { asc, eq } from 'drizzle-orm';
 import { router } from 'expo-router';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { db } from '../../db';
-import { catalogue } from '../../schema';
+import { catalogue, item } from '../../schema';
 import type { Catalogue } from '../../schema';
 import { deleteCatalogue } from '../../sync';
 
@@ -62,26 +62,37 @@ function CatalogueRow({ catalogue: cat }: { catalogue: Catalogue }) {
         </Pressable>
         <Pressable
           style={styles.deleteAction}
-          onPress={() => {
+          onPress={async () => {
             swipeRef.current?.close();
-            Alert.alert(
-              'Delete Catalogue',
-              `Delete "${cat.name}"? This cannot be undone.`,
-              [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                  text: 'Delete',
-                  style: 'destructive',
-                  onPress: async () => {
-                    try {
-                      await deleteCatalogue(cat.id);
-                    } catch (e) {
-                      Alert.alert('Cannot delete', e instanceof Error ? e.message : String(e));
-                    }
-                  },
-                },
-              ]
-            );
+            const items = await db.select({ id: item.id }).from(item).where(eq(item.catalogueId, cat.id));
+            const count = items.length;
+            const doDelete = async (deleteItems: boolean) => {
+              try {
+                await deleteCatalogue(cat.id, { deleteItems });
+              } catch (e) {
+                Alert.alert('Cannot delete', e instanceof Error ? e.message : String(e));
+              }
+            };
+            if (count === 0) {
+              Alert.alert(
+                'Delete Catalogue',
+                `Delete "${cat.name}"? This cannot be undone.`,
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Delete', style: 'destructive', onPress: () => doDelete(true) },
+                ]
+              );
+            } else {
+              Alert.alert(
+                'Delete Catalogue',
+                `"${cat.name}" contains ${count} item${count === 1 ? '' : 's'}. What should happen to them?`,
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Keep Items', onPress: () => doDelete(false) },
+                  { text: 'Delete All', style: 'destructive', onPress: () => doDelete(true) },
+                ]
+              );
+            }
           }}
         >
           <Text style={styles.actionText}>Delete</Text>

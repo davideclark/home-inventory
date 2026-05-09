@@ -7,7 +7,7 @@ import { useLocalSearchParams, router } from 'expo-router';
 import { eq } from 'drizzle-orm';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { db } from '../../db';
-import { catalogue } from '../../schema';
+import { catalogue, item } from '../../schema';
 import { deleteCatalogue } from '../../sync';
 
 export default function EditCatalogueScreen() {
@@ -61,20 +61,34 @@ export default function EditCatalogueScreen() {
     }
   }
 
-  function confirmDelete() {
-    Alert.alert(
-      'Delete Catalogue',
-      `Delete "${name}"? This cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: handleDelete },
-      ]
-    );
+  async function confirmDelete() {
+    const items = await db.select({ id: item.id }).from(item).where(eq(item.catalogueId, id));
+    const count = items.length;
+    if (count === 0) {
+      Alert.alert(
+        'Delete Catalogue',
+        `Delete "${name}"? This cannot be undone.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Delete', style: 'destructive', onPress: () => handleDelete(true) },
+        ]
+      );
+    } else {
+      Alert.alert(
+        'Delete Catalogue',
+        `"${name}" contains ${count} item${count === 1 ? '' : 's'}. What should happen to them?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Keep Items', onPress: () => handleDelete(false) },
+          { text: 'Delete All', style: 'destructive', onPress: () => handleDelete(true) },
+        ]
+      );
+    }
   }
 
-  async function handleDelete() {
+  async function handleDelete(deleteItems: boolean) {
     try {
-      await deleteCatalogue(id);
+      await deleteCatalogue(id, { deleteItems });
       router.back();
     } catch (e) {
       Alert.alert('Cannot delete', e instanceof Error ? e.message : String(e));

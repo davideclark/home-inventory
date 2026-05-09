@@ -21,7 +21,7 @@ export default function CataloguesPage() {
 
   const [modal, setModal]     = useState<{ mode: 'add' | 'edit'; item?: Catalogue } | null>(null);
   const [form, setForm]       = useState<Form>(blank);
-  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; itemCount: number } | null>(null);
   const [saving, setSaving]   = useState(false);
   const [error, setError]     = useState('');
 
@@ -55,10 +55,17 @@ export default function CataloguesPage() {
     } finally { setSaving(false); }
   }
 
-  async function deleteCatalogue(id: string) {
-    await api.catalogues.delete(id);
+  async function handleDeleteClick(id: string) {
+    const items = await api.items.list<{ id: string }[]>({ catalogueId: id });
+    setDeleteTarget({ id, itemCount: items.length });
+  }
+
+  async function confirmDelete(keepItems: boolean) {
+    if (!deleteTarget) return;
+    await api.catalogues.delete(deleteTarget.id, keepItems);
     qc.invalidateQueries({ queryKey: ['catalogues'] });
-    setConfirmId(null);
+    qc.invalidateQueries({ queryKey: ['items'] });
+    setDeleteTarget(null);
   }
 
   const f = (k: keyof Form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
@@ -90,7 +97,7 @@ export default function CataloguesPage() {
               <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                 <Link href={`/catalogues/${cat.id}`} className="btn-sm">View items</Link>
                 <button onClick={() => openEdit(cat)} className="btn-sm">Edit</button>
-                <button onClick={() => setConfirmId(cat.id)} className="btn-sm-danger">Delete</button>
+                <button onClick={() => handleDeleteClick(cat.id)} className="btn-sm-danger">Delete</button>
               </div>
             </div>
           ))}
@@ -131,11 +138,17 @@ export default function CataloguesPage() {
         </Modal>
       )}
 
-      {confirmId && (
+      {deleteTarget && (
         <ConfirmDialog
-          message="Delete this catalogue? Items will lose their catalogue association."
-          onConfirm={() => deleteCatalogue(confirmId)}
-          onCancel={() => setConfirmId(null)}
+          message={
+            deleteTarget.itemCount === 0
+              ? 'Delete this catalogue? This cannot be undone.'
+              : `This catalogue contains ${deleteTarget.itemCount} item${deleteTarget.itemCount === 1 ? '' : 's'}. Delete them too, or keep them without a catalogue?`
+          }
+          confirmLabel="Delete All"
+          secondaryAction={deleteTarget.itemCount > 0 ? { label: 'Keep Items', onClick: () => confirmDelete(true) } : undefined}
+          onConfirm={() => confirmDelete(false)}
+          onCancel={() => setDeleteTarget(null)}
         />
       )}
     </div>

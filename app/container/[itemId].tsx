@@ -6,7 +6,7 @@ import { eq } from 'drizzle-orm';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { db } from '../../db';
 import { item, catalogue } from '../../schema';
-import { deleteItem } from '../../sync';
+import { deleteItem, deleteContainer } from '../../sync';
 
 const STATUS_COLOURS: Record<string, string> = {
   active:   '#34c759',
@@ -192,15 +192,35 @@ function ContainerRow({ child: c, containerMap }: { child: Child; containerMap: 
         </Pressable>
         <Pressable
           style={styles.deleteAction}
-          onPress={() => {
+          onPress={async () => {
             swipeRef.current?.close();
-            Alert.alert('Delete Container', `Delete "${c.name}"? This cannot be undone.`, [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'Delete', style: 'destructive', onPress: async () => {
-                try { await deleteItem(c.id); }
-                catch (e) { Alert.alert('Cannot delete', e instanceof Error ? e.message : String(e)); }
-              }},
-            ]);
+            const directChildren = await db.select({ id: item.id, canContain: item.canContain })
+              .from(item).where(eq(item.parentId, c.id));
+            const count = directChildren.length;
+            const doDelete = async (cascade: boolean) => {
+              try { await deleteContainer(c.id, { cascade }); }
+              catch (e) { Alert.alert('Cannot delete', e instanceof Error ? e.message : String(e)); }
+            };
+            if (count === 0) {
+              Alert.alert('Delete Container', `Delete "${c.name}"? This cannot be undone.`, [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Delete', style: 'destructive', onPress: () => doDelete(true) },
+              ]);
+            } else {
+              const hasNonContainerItems = directChildren.some(ch => !ch.canContain);
+              const canMoveUp = c.parentId !== null || !hasNonContainerItems;
+              Alert.alert(
+                'Delete Container',
+                canMoveUp
+                  ? `"${c.name}" contains ${count} item${count === 1 ? '' : 's'}. Move them to the parent container, or delete everything?`
+                  : `"${c.name}" contains ${count} item${count === 1 ? '' : 's'}. It has no parent, so all contents must be deleted too.`,
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  ...(canMoveUp ? [{ text: 'Move Contents Up', onPress: () => doDelete(false) }] : []),
+                  { text: 'Delete All', style: 'destructive' as const, onPress: () => doDelete(true) },
+                ]
+              );
+            }
           }}
         >
           <Text style={styles.actionText}>Delete</Text>
