@@ -76,8 +76,9 @@ API_TOKEN=ClarenceRoad
 
 **To rebuild and push the web Docker image:**
 ```bash
-docker buildx build --platform linux/amd64,linux/arm64,linux/arm/v7 -t davideclark/home-inventory-web:latest --push ./web
+docker buildx build --platform linux/amd64,linux/arm64 -t davideclark/home-inventory-web:latest --push ./web
 ```
+> Note: arm/v7 is excluded from the web build — Next.js compilation via QEMU emulation takes 60+ minutes. The NAS is amd64; arm64 covers Raspberry Pi 4/5.
 
 **DATABASE_URL (local dev)**: `postgresql://inventory:inventory_local@localhost:5432/home_inventory`
 
@@ -239,7 +240,7 @@ All mutable tables carry `device_id`, `last_modified`, and `synced` for offline-
 **Deletes**: always use `deleteItem(id)`, `deleteCatalogue(id, opts)`, or `deleteContainer(id, opts)` from `sync.ts`. These atomically delete the record and create a `sync_tombstone` row with `synced = false`. The tombstone is pushed on the next sync and pulled by other devices, which then delete their local copy. The REST API and MCP server also create tombstones on DELETE so server-side deletes propagate to the phone on the next pull.
 
 - `deleteCatalogue(id, { deleteItems })` — when `deleteItems=true` (default): tombstones and deletes all items in the catalogue first. When `deleteItems=false`: nulls out `catalogueId` on items instead (they become uncategorised). The UI counts items and asks before deleting. Server API supports `DELETE /api/catalogues/:id?keepItems=true` for the same choice.
-- `deleteContainer(id, { cascade })` — when `cascade=true` (default): BFS through all descendants, tombstones and deletes every item in the tree, then the container. When `cascade=false`: moves all direct children's `parentId` up to the container's parent (non-container items with no parent to inherit are deleted). The UI counts direct children and offers Move Contents Up / Delete All.
+- `deleteContainer(id, { cascade })` — when `cascade=true` (default): BFS through all descendants, tombstones and deletes every item in the tree, then the container. When `cascade=false`: moves all direct children's `parentId` up to the container's parent (non-container items with no parent to inherit are deleted). The UI counts direct children and offers Move Contents Up / Delete All. Server API supports `DELETE /api/items/:id?cascade=true` and `DELETE /api/items/:id?moveUp=true` for the same behaviour from the web.
 
 **Server push endpoint** handles two constraint violations gracefully rather than returning 500:
 - `item_number` unique clash → retries inserting the item with `item_number = null`
