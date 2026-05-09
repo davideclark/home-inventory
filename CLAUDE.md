@@ -143,6 +143,8 @@ context/
                            not currently used — kept for future use)
 
 sync.ts                    Sync logic: getDeviceId(), sync(), push(), pull()
+                           Exports deleteItem(id), deleteCatalogue(id), deleteContainer(id) —
+                           always use these instead of db.delete() to ensure tombstones are created.
                            Reads api_url and api_token from settings table.
                            Sends X-API-Token header on all requests.
                            Push-then-pull, last-write-wins on last_modified.
@@ -214,11 +216,12 @@ Modals use `presentation: 'modal'` in `_layout.tsx`.
 
 ## Data Model (`schema.ts`)
 
-Four tables:
+Five tables:
 
 - **`catalogue`** — item categories/templates. `is_structural = true` marks Locations and Containers (excluded from inventory browse/export). Has `icon` (emoji), `description`, `sort_order`.
 - **`item`** — entire physical hierarchy in one self-referencing table. `item_number` is nullable (containers/locations don't need a sticker). `parent_id` is a UUID self-ref. `spec` is a JSON blob for catalogue-specific fields. `can_contain` is per-item. CHECK constraint: `can_contain = 1 OR parent_id IS NOT NULL`.
 - **`settings`** — key/value store for app-level state. Keys: `device_id`, `last_sync_at`, `api_url`, `api_token`.
+- **`sync_tombstone`** — records deletes so they propagate across devices. `entity_type` is `'catalogue' | 'item'`, `entity_id` is the UUID of the deleted record. Mobile adds `synced` boolean (SQLite); server schema omits it. Always delete via `deleteItem()`/`deleteCatalogue()`/`deleteContainer()` in `sync.ts` — never call `db.delete()` directly, or the tombstone won't be created.
 - **`sync_log`** — polymorphic audit trail. `entity_type` is `'catalogue' | 'item'`, `entity_id` is the UUID of the record. No DB-level FK — app-enforced.
 
 All mutable tables carry `device_id`, `last_modified`, and `synced` for offline-first last-write-wins sync.
@@ -229,15 +232,18 @@ All mutable tables carry `device_id`, `last_modified`, and `synced` for offline-
 
 **Auth**: all sync requests include `X-API-Token: <token>` header. Token is stored in the `settings` table (`api_token` key) and set via the Settings tab. Server rejects requests with wrong/missing token with 401.
 
-**Push**: selects all local records where `synced = false`. Before pushing items, deletes any orphaned items whose `catalogue_id` no longer exists in the local catalogue table (prevents FK violations on the server). Sends all unsynced catalogues and items in a single POST to `/api/sync/push`. On success, marks all pushed records `synced = true`.
+**Push**: selects all local records where `synced = false`, including `sync_tombstone` rows. Before pushing items, deletes any orphaned items whose `catalogue_id` no longer exists in the local catalogue table (prevents FK violations on the server). Sends unsynced catalogues, items, and tombstones in a single POST to `/api/sync/push`. On success, marks all pushed records `synced = true`.
 
-**Pull**: GET `/api/sync/pull?since={lastSyncAt}`. Server returns all records modified since that timestamp. Each received record is upserted locally — updated only if the server's `last_modified` >= the local `last_modified` (last-write-wins). All pulled records are marked `synced = true`. Updates `last_sync_at` in the `settings` table.
+**Pull**: GET `/api/sync/pull?since={lastSyncAt}`. Server returns catalogues, items, and tombstones modified/deleted since that timestamp. Tombstones are applied first — matching local items/catalogues are deleted before upserts run. Each received record is upserted locally — updated only if the server's `last_modified` >= the local `last_modified` (last-write-wins). Updates `last_sync_at` in the `settings` table.
+
+**Deletes**: always use `deleteItem(id)`, `deleteCatalogue(id, opts)`, or `deleteContainer(id, opts)` from `sync.ts`. These atomically delete the record and create a `sync_tombstone` row with `synced = false`. The tombstone is pushed on the next sync and pulled by other devices, which then delete their local copy. The REST API and MCP server also create tombstones on DELETE so server-side deletes propagate to the phone on the next pull.
+
+- `deleteCatalogue(id, { deleteItems })` — when `deleteItems=true` (default): tombstones and deletes all items in the catalogue first. When `deleteItems=false`: nulls out `catalogueId` on items instead (they become uncategorised). The UI counts items and asks before deleting. Server API supports `DELETE /api/catalogues/:id?keepItems=true` for the same choice.
+- `deleteContainer(id, { cascade })` — when `cascade=true` (default): BFS through all descendants, tombstones and deletes every item in the tree, then the container. When `cascade=false`: moves all direct children's `parentId` up to the container's parent (non-container items with no parent to inherit are deleted). The UI counts direct children and offers Move Contents Up / Delete All.
 
 **Server push endpoint** handles two constraint violations gracefully rather than returning 500:
 - `item_number` unique clash → retries inserting the item with `item_number = null`
 - `catalogue_id` FK violation → retries inserting the item with `catalogue_id = null`
-
-**Known gap**: deletes are not synced. Deleting an item/catalogue on the phone does not propagate to the server (and vice versa). Workaround: delete on both sides manually. Fix requires a tombstone table.
 
 **Server config in app**: the Settings tab lets you enter/change the server URL and token. Values are saved to the `settings` table. `sync.ts` reads them at runtime with a module-level cache; call `clearApiConfigCache()` after changing settings to force a re-read.
 
@@ -262,7 +268,7 @@ All mutable tables carry `device_id`, `last_modified`, and `synced` for offline-
 - PostgreSQL schema uses `jsonb` for the `spec` column (vs `text` in SQLite) — no shape validation, fully flexible per catalogue.
 - Spec field conversion: mobile stores spec as a JSON string; push serialises it to an object for PostgreSQL jsonb; pull stringifies it back for SQLite.
 - Timestamps stored as ISO text strings in both mobile and server for lexicographic last-write-wins comparison. SQLite's `datetime('now')` default produces a non-ISO format — sync.ts normalises both formats via `toMs()` before comparing.
-- MCP server uses stdio transport — Claude Code spawns it as a local process via `.claudecode.json`. Also registered in Claude Desktop config. Restart the respective app after changing either config file.
+- MCP server uses stdio transport — Claude Code spawns it as a local process via `.claudecode.json`. Also registered in Claude Desktop config. Restart the respective app after changing either config file. The MCP process is long-lived — if `mcp.ts` is changed mid-session, the running process still uses the old code; restart Claude Code to pick up changes.
 - `bulk_import` MCP tool does topological sort on items before inserting (parents before children).
 - `API_TOKEN` env var gates all endpoints except `/api/health` and `/api/discover`. If not set, auth is skipped (dev mode).
 - `/api/discover` returns `{ name, version, requiresToken }` — used by the app's Settings screen to identify and verify the server.
