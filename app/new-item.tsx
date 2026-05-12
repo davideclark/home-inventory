@@ -1,7 +1,8 @@
 import {
-  View, Text, TextInput, StyleSheet, Pressable, Switch,
+  View, StyleSheet, Pressable, Switch,
   ScrollView, Alert, Modal, FlatList,
 } from 'react-native';
+import { Text, TextInput } from '../components/Text';
 import { useState, useEffect, useMemo } from 'react';
 import { useLocalSearchParams, router } from 'expo-router';
 import { eq } from 'drizzle-orm';

@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
+import { View, StyleSheet, ScrollView, Pressable } from 'react-native';
+import { Text } from '../components/Text';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
 import { useMemo } from 'react';
 import { eq } from 'drizzle-orm';

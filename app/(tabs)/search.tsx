@@ -1,4 +1,5 @@
-import { View, Text, TextInput, FlatList, StyleSheet, Pressable, Keyboard } from 'react-native';
+import { View, FlatList, StyleSheet, Pressable, Keyboard } from 'react-native';
+import { Text, TextInput } from '../../components/Text';
 import { useState, useRef } from 'react';
 import { router } from 'expo-router';
 import { or, like, eq, asc, sql } from 'drizzle-orm';

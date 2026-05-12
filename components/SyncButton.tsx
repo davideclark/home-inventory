@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, Text } from 'react-native';
+import { ActivityIndicator, Alert, Pressable } from 'react-native';
+import { Text } from './Text';
 import { sync } from '../sync';
 
 export default function SyncButton() {

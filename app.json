@@ -26,7 +26,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#007aff"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
@@ -36,7 +36,8 @@
     },
     "plugins": [
       "expo-router",
-      "expo-sqlite"
+      "expo-sqlite",
+      "expo-font"
     ],
     "extra": {
       "router": {},

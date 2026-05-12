@@ -3,12 +3,14 @@ import { Text, View, StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useMigrations } from 'drizzle-orm/expo-sqlite/migrator';
 import { useEffect } from 'react';
+import { useFonts, Manrope_400Regular, Manrope_500Medium, Manrope_600SemiBold, Manrope_700Bold } from '@expo-google-fonts/manrope';
 import migrations from '../drizzle/migrations';
 import { db } from '../db';
 import { sync } from '../sync';
 
 export default function RootLayout() {
   const { success, error } = useMigrations(db, migrations);
+  const [fontsLoaded] = useFonts({ Manrope_400Regular, Manrope_500Medium, Manrope_600SemiBold, Manrope_700Bold });
 
   useEffect(() => {
     if (success) sync().catch(() => {});
@@ -22,7 +24,7 @@ export default function RootLayout() {
     );
   }
 
-  if (!success) {
+  if (!success || !fontsLoaded) {
     return (
       <View style={styles.centered}>
         <Text>Loading…</Text>

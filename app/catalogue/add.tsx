@@ -1,7 +1,8 @@
 import {
-  View, Text, TextInput, StyleSheet, Pressable,
+  View, StyleSheet, Pressable,
   ScrollView, Alert, KeyboardAvoidingView, Platform,
 } from 'react-native';
+import { Text, TextInput } from '../../components/Text';
 import { useState } from 'react';
 import { router } from 'expo-router';
 import { db } from '../../db';

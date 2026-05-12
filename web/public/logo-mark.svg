@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Home Inventory">
+  <g fill="none" stroke="#007aff" stroke-width="4" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M 32 7 L 57 27 L 57 57 L 7 57 L 7 27 Z"></path>
+    <path d="M 32 27 L 32 57"></path>
+    <path d="M 7 42 L 57 42"></path>
+  </g>
+  <path d="M 32 27 L 57 27 L 57 42 L 32 42 Z" fill="#007aff"></path>
+</svg>

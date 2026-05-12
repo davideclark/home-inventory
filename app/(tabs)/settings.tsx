@@ -1,4 +1,5 @@
-import { View, Text, TextInput, StyleSheet, Pressable, ActivityIndicator, ScrollView, Keyboard } from 'react-native';
+import { View, StyleSheet, Pressable, ActivityIndicator, ScrollView, Keyboard } from 'react-native';
+import { Text, TextInput } from '../../components/Text';
 import { useState, useEffect, useCallback } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { eq } from 'drizzle-orm';

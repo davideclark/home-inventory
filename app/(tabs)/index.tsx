@@ -1,4 +1,5 @@
-import { FlatList, View, Text, StyleSheet, Pressable, Alert } from 'react-native';
+import { FlatList, View, StyleSheet, Pressable, Alert } from 'react-native';
+import { Text } from '../../components/Text';
 import { useRef } from 'react';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { asc, eq } from 'drizzle-orm';
