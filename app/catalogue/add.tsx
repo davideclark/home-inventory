@@ -55,6 +55,7 @@ export default function AddCatalogueScreen() {
                 placeholder="🖥️"
                 maxLength={4}
                 textAlign="center"
+                selectTextOnFocus
               />
             </View>
             <View style={styles.nameField}>

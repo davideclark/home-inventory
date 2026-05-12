@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import ItemModal from '../../components/ItemModal';
 import ConfirmDialog from '../../components/ConfirmDialog';
@@ -8,10 +8,15 @@ import type { Catalogue, Item } from '../../lib/types';
 
 export default function SearchPage() {
   const qc = useQueryClient();
-  const [query, setQuery]     = useState('');
-  const [submitted, setSubmitted] = useState('');
+  const [query, setQuery]       = useState('');
+  const [debounced, setDebounced] = useState('');
   const [editItem, setEditItem]   = useState<Item | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(query.trim()), 300);
+    return () => clearTimeout(t);
+  }, [query]);
 
   const { data: catalogues = [] } = useQuery({
     queryKey: ['catalogues'],
@@ -21,18 +26,14 @@ export default function SearchPage() {
   const catalogueMap = new Map(catalogues.map(c => [c.id, c]));
 
   const { data: results = [], isFetching } = useQuery({
-    queryKey: ['search', submitted],
-    queryFn:  () => api.search<Item[]>(submitted),
-    enabled:  submitted.length > 0,
+    queryKey: ['search', debounced],
+    queryFn:  () => api.search<Item[]>(debounced),
+    enabled:  debounced.length >= 2,
   });
-
-  function search() {
-    if (query.trim()) setSubmitted(query.trim());
-  }
 
   async function deleteItem(id: string) {
     await api.items.delete(id);
-    qc.invalidateQueries({ queryKey: ['search', submitted] });
+    qc.invalidateQueries({ queryKey: ['search', debounced] });
     setConfirmId(null);
   }
 
@@ -44,22 +45,20 @@ export default function SearchPage() {
     <div>
       <h1 className="text-xl font-semibold mb-4">Search</h1>
 
-      <div className="flex gap-2 mb-6">
+      <div className="mb-6">
         <input
           value={query}
           onChange={e => setQuery(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && search()}
-          className="input flex-1"
+          className="input w-full"
           placeholder="Search by name, manufacturer, model, or notes…"
           autoFocus
         />
-        <button onClick={search} className="btn-primary px-6">Search</button>
       </div>
 
       {isFetching && <p className="text-gray-400 text-sm">Searching…</p>}
 
-      {!isFetching && submitted && results.length === 0 && (
-        <p className="text-gray-400 text-sm">No results for "{submitted}".</p>
+      {!isFetching && debounced.length >= 2 && results.length === 0 && (
+        <p className="text-gray-400 text-sm">No results for "{debounced}".</p>
       )}
 
       {results.length > 0 && (
@@ -110,7 +109,7 @@ export default function SearchPage() {
       {editItem && (
         <ItemModal
           item={editItem}
-          onSave={() => { qc.invalidateQueries({ queryKey: ['search', submitted] }); setEditItem(null); }}
+          onSave={() => { qc.invalidateQueries({ queryKey: ['search', debounced] }); setEditItem(null); }}
           onClose={() => setEditItem(null)}
         />
       )}

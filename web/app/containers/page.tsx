@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import ItemModal from '../../components/ItemModal';
 import { api } from '../../lib/api';
 import type { Item } from '../../lib/types';
 
@@ -19,6 +20,7 @@ export default function ContainersPage() {
 
   const subContainerCount = (id: string) => allContainers.filter(c => c.parentId === id).length;
 
+  const [editItem, setEditItem] = useState<Item | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{
     id: string; name: string; childCount: number; hasNonContainerChildren: boolean;
   } | null>(null);
@@ -31,6 +33,11 @@ export default function ContainersPage() {
       childCount: children.length,
       hasNonContainerChildren: children.some(c => !c.canContain),
     });
+  }
+
+  function afterEdit() {
+    qc.invalidateQueries({ queryKey: ['containers'] });
+    setEditItem(null);
   }
 
   async function confirmDelete(mode: 'cascade' | 'moveUp') {
@@ -58,17 +65,23 @@ export default function ContainersPage() {
               <span className="text-xl">📦</span>
               <Link href={`/containers/${c.id}`} className="flex-1 hover:text-blue-500">
                 <div className="font-medium text-sm">{c.name}</div>
+                {c.notes && <div className="text-xs text-gray-500 mt-0.5">{c.notes}</div>}
                 {subContainerCount(c.id) > 0 && (
                   <div className="text-xs text-gray-400">{subContainerCount(c.id)} sub-containers</div>
                 )}
               </Link>
               <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button onClick={() => setEditItem(c)} className="btn-sm">Edit</button>
                 <button onClick={() => handleDeleteClick(c)} className="btn-sm-danger">Delete</button>
               </div>
               <Link href={`/containers/${c.id}`} className="text-gray-300 group-hover:text-gray-400">›</Link>
             </div>
           ))}
         </div>
+      )}
+
+      {editItem && (
+        <ItemModal item={editItem} onSave={afterEdit} onClose={() => setEditItem(null)} />
       )}
 
       {deleteTarget && (() => {

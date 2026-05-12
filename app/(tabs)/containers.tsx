@@ -26,7 +26,7 @@ function naturalSort(a: string, b: string): number {
 
 export default function ContainersScreen() {
   const { data: rawContainers } = useLiveQuery(
-    db.select({ id: item.id, name: item.name, itemNumber: item.itemNumber })
+    db.select({ id: item.id, name: item.name, itemNumber: item.itemNumber, notes: item.notes })
       .from(item)
       .where(and(eq(item.canContain, true), isNull(item.parentId)))
   );
@@ -60,7 +60,10 @@ export default function ContainersScreen() {
               <Text style={styles.numberText}>#{String(c.itemNumber).padStart(3, '0')}</Text>
             </View>
           )}
-          <Text style={[styles.rowName, c.itemNumber == null && styles.rowNameNobadge]}>{c.name}</Text>
+          <View style={[styles.rowBody, c.itemNumber == null && styles.rowBodyNobadge]}>
+            <Text style={styles.rowName}>{c.name}</Text>
+            {c.notes ? <Text style={styles.rowNotes}>{c.notes}</Text> : null}
+          </View>
           <Text style={styles.chevron}>›</Text>
         </Pressable>
       )}
@@ -92,8 +95,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   numberText: { fontSize: 12, fontWeight: '600', color: '#555', fontVariant: ['tabular-nums'] },
-  rowName: { flex: 1, fontSize: 16, fontWeight: '500', color: '#111' },
-  rowNameNobadge: { marginLeft: 4 },
+  rowBody: { flex: 1 },
+  rowBodyNobadge: { marginLeft: 4 },
+  rowName: { fontSize: 16, fontWeight: '500', color: '#111' },
+  rowNotes: { fontSize: 13, color: '#666', marginTop: 2 },
   chevron: { fontSize: 20, color: '#ccc' },
   separator: { height: StyleSheet.hairlineWidth, backgroundColor: '#ddd', marginLeft: 76 },
 });

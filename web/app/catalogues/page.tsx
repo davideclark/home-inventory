@@ -87,10 +87,10 @@ export default function CataloguesPage() {
           {sorted.map(cat => (
             <div key={cat.id} className="flex items-center px-4 py-3 gap-3 hover:bg-gray-50 group">
               <span className="text-xl w-8 text-center">{cat.icon ?? '📁'}</span>
-              <div className="flex-1 min-w-0">
+              <Link href={`/catalogues/${cat.id}`} className="flex-1 min-w-0 hover:text-blue-500">
                 <div className="font-medium text-sm">{cat.name}</div>
                 {cat.description && <div className="text-xs text-gray-400 truncate">{cat.description}</div>}
-              </div>
+              </Link>
               {cat.isStructural && (
                 <span className="text-xs text-gray-400 border border-gray-200 rounded px-1.5 py-0.5">structural</span>
               )}
@@ -124,7 +124,7 @@ export default function CataloguesPage() {
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">Icon (emoji)</label>
-              <input value={form.icon} onChange={f('icon')} className="input" placeholder="🔌" />
+              <input value={form.icon} onChange={f('icon')} onFocus={e => e.target.select()} className="input w-24 text-center text-xl" placeholder="none" />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">Description</label>

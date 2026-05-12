@@ -120,6 +120,7 @@ export default function EditCatalogueScreen() {
                 placeholder="🖥️"
                 maxLength={4}
                 textAlign="center"
+                selectTextOnFocus
               />
             </View>
             <View style={styles.nameField}>

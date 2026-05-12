@@ -117,10 +117,12 @@ export default function ContainerPage() {
                 {subContainers.map(c => (
                   <div key={c.id} className="flex items-center px-4 py-3 gap-3 hover:bg-gray-50 group">
                     <span className="text-lg">📦</span>
-                    <Link href={`/containers/${c.id}`} className="flex-1 font-medium text-sm hover:text-blue-500">
-                      {c.name}
+                    <Link href={`/containers/${c.id}`} className="flex-1 hover:text-blue-500">
+                      <div className="font-medium text-sm">{c.name}</div>
+                      {c.notes && <div className="text-xs text-gray-500 mt-0.5">{c.notes}</div>}
                     </Link>
                     <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => setEditItem(c)} className="btn-sm">Edit</button>
                       <button onClick={() => handleContainerDeleteClick(c)} className="btn-sm-danger">Delete</button>
                     </div>
                     <Link href={`/containers/${c.id}`} className="text-gray-300 group-hover:text-gray-400">›</Link>
