@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import ItemModal from '../../../components/ItemModal';
 import ConfirmDialog from '../../../components/ConfirmDialog';
+import IconRenderer from '../../../components/IconRenderer';
 import { api } from '../../../lib/api';
 import type { Catalogue, Item } from '../../../lib/types';
 
@@ -50,7 +51,7 @@ export default function CatalogueItemsPage() {
         <Link href="/catalogues" className="text-blue-500 hover:underline text-sm">← Catalogues</Link>
         <span className="text-gray-300">/</span>
         <h1 className="text-xl font-semibold">
-          {catalogue?.icon ? `${catalogue.icon} ` : ''}{catalogue?.name ?? '…'}
+          {catalogue?.icon && <IconRenderer value={catalogue.icon} size={20} className="mr-1" />}{catalogue?.name ?? '…'}
         </h1>
         <div className="ml-auto">
           <button onClick={() => setAddOpen(true)} className="btn-primary">+ Add Item</button>

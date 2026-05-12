@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import ItemModal from '../../components/ItemModal';
+import IconRenderer from '../../components/IconRenderer';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { api } from '../../lib/api';
 import type { Catalogue, Item } from '../../lib/types';
@@ -83,7 +84,7 @@ export default function SearchPage() {
                     <td className="px-4 py-3 text-gray-400 font-mono text-xs tabular-nums">{itemNum(it)}</td>
                     <td className="px-4 py-3 font-medium">{it.name}</td>
                     <td className="px-4 py-3 text-gray-500 text-xs">
-                      {cat ? `${cat.icon ? cat.icon + ' ' : ''}${cat.name}` : ''}
+                      {cat ? <span className="flex items-center gap-1"><IconRenderer value={cat.icon} size={14} />{cat.name}</span> : ''}
                     </td>
                     <td className="px-4 py-3 text-gray-500">{it.manufacturer ?? ''}</td>
                     <td className="px-4 py-3 text-gray-500">{it.model ?? ''}</td>

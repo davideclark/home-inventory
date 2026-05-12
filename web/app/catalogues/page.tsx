@@ -4,6 +4,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import Modal from '../../components/Modal';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import IconRenderer from '../../components/IconRenderer';
+import IconPicker from '../../components/IconPicker';
 import { api } from '../../lib/api';
 import type { Catalogue } from '../../lib/types';
 
@@ -19,11 +21,12 @@ export default function CataloguesPage() {
 
   const sorted = [...catalogues].sort((a, b) => a.name.localeCompare(b.name));
 
-  const [modal, setModal]     = useState<{ mode: 'add' | 'edit'; item?: Catalogue } | null>(null);
-  const [form, setForm]       = useState<Form>(blank);
+  const [modal, setModal]           = useState<{ mode: 'add' | 'edit'; item?: Catalogue } | null>(null);
+  const [form, setForm]             = useState<Form>(blank);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; itemCount: number } | null>(null);
-  const [saving, setSaving]   = useState(false);
-  const [error, setError]     = useState('');
+  const [saving, setSaving]         = useState(false);
+  const [error, setError]           = useState('');
+  const [showIconPicker, setShowIconPicker] = useState(false);
 
   function openAdd() {
     setForm(blank); setError(''); setModal({ mode: 'add' });
@@ -31,6 +34,9 @@ export default function CataloguesPage() {
   function openEdit(cat: Catalogue) {
     setForm({ name: cat.name, icon: cat.icon ?? '', description: cat.description ?? '', isStructural: cat.isStructural });
     setError(''); setModal({ mode: 'edit', item: cat });
+  }
+  function closeModal() {
+    setModal(null); setShowIconPicker(false);
   }
 
   async function save() {
@@ -86,7 +92,7 @@ export default function CataloguesPage() {
         <div className="card divide-y divide-gray-100">
           {sorted.map(cat => (
             <div key={cat.id} className="flex items-center px-4 py-3 gap-3 hover:bg-gray-50 group">
-              <span className="text-xl w-8 text-center">{cat.icon ?? '📁'}</span>
+              <IconRenderer value={cat.icon} size={20} className="w-8 flex items-center justify-center" />
               <Link href={`/catalogues/${cat.id}`} className="flex-1 min-w-0 hover:text-blue-500">
                 <div className="font-medium text-sm">{cat.name}</div>
                 {cat.description && <div className="text-xs text-gray-400 truncate">{cat.description}</div>}
@@ -107,10 +113,10 @@ export default function CataloguesPage() {
       {modal && (
         <Modal
           title={modal.mode === 'add' ? 'Add Catalogue' : 'Edit Catalogue'}
-          onClose={() => setModal(null)}
+          onClose={closeModal}
           footer={
             <>
-              <button onClick={() => setModal(null)} className="btn-secondary">Cancel</button>
+              <button onClick={closeModal} className="btn-secondary">Cancel</button>
               <button onClick={save} disabled={saving} className="btn-primary">{saving ? 'Saving…' : 'Save'}</button>
             </>
           }
@@ -123,8 +129,23 @@ export default function CataloguesPage() {
                 onKeyDown={e => e.key === 'Enter' && save()} className="input" placeholder="Cables" />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Icon (emoji)</label>
-              <input value={form.icon} onChange={f('icon')} onFocus={e => e.target.select()} className="input w-24 text-center text-xl" placeholder="none" />
+              <label className="block text-xs font-medium text-gray-500 mb-1">Icon</label>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowIconPicker(true)}
+                  className="w-12 h-12 flex items-center justify-center rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors bg-white"
+                  title="Choose icon"
+                >
+                  <IconRenderer value={form.icon || null} size={22} />
+                </button>
+                {form.icon && (
+                  <button type="button" onClick={() => setForm(p => ({ ...p, icon: '' }))} className="text-xs text-gray-400 hover:text-gray-600">
+                    Clear
+                  </button>
+                )}
+                {!form.icon && <span className="text-xs text-gray-400">Click to choose</span>}
+              </div>
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">Description</label>
@@ -136,6 +157,14 @@ export default function CataloguesPage() {
             </label>
           </div>
         </Modal>
+      )}
+
+      {showIconPicker && (
+        <IconPicker
+          value={form.icon || null}
+          onChange={v => setForm(p => ({ ...p, icon: v }))}
+          onClose={() => setShowIconPicker(false)}
+        />
       )}
 
       {deleteTarget && (

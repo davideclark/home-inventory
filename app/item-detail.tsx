@@ -6,6 +6,7 @@ import { eq } from 'drizzle-orm';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { db } from '../db';
 import { item, catalogue } from '../schema';
+import { emojiIcon } from '../utils';
 
 const STATUS_COLOURS: Record<string, string> = {
   active:   '#34c759',
@@ -107,7 +108,7 @@ export default function ItemDetailScreen() {
         {/* Classification */}
         {(cat || i.manufacturer || i.model || i.type) && (
           <View style={styles.section}>
-            {cat && <Row label="Catalogue" value={cat.icon ? `${cat.icon} ${cat.name}` : cat.name} />}
+            {cat && <Row label="Catalogue" value={emojiIcon(cat.icon) ? `${emojiIcon(cat.icon)} ${cat.name}` : cat.name} />}
             {i.manufacturer && <Row label="Manufacturer" value={i.manufacturer} />}
             {i.model && <Row label="Model" value={i.model} />}
             {i.type && <Row label="Type" value={i.type} />}

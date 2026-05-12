@@ -10,6 +10,7 @@ import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { db } from '../db';
 import { item, catalogue } from '../schema';
 import { getDeviceId, deleteItem } from '../sync';
+import { emojiIcon } from '../utils';
 
 function naturalSort(a: string, b: string): number {
   const re = /(\d+)/g;
@@ -104,7 +105,7 @@ export default function EditItemScreen() {
     if (existing.catalogueId) {
       const cat = catalogues.find(c => c.id === existing.catalogueId);
       if (cat) {
-        setCatalogueLabel(cat.icon ? `${cat.icon} ${cat.name}` : cat.name);
+        setCatalogueLabel(emojiIcon(cat.icon) ? `${emojiIcon(cat.icon)} ${cat.name}` : cat.name);
       }
     }
     setLoaded(true);
@@ -352,11 +353,11 @@ export default function EditItemScreen() {
                 style={[styles.pickerRow, catalogueId === c.id && styles.pickerRowSelected]}
                 onPress={() => {
                   setCatalogueId(c.id);
-                  setCatalogueLabel(c.icon ? `${c.icon} ${c.name}` : c.name);
+                  setCatalogueLabel(emojiIcon(c.icon) ? `${emojiIcon(c.icon)} ${c.name}` : c.name);
                   setCataloguePickerVisible(false);
                 }}
               >
-                <Text style={styles.pickerRowText}>{c.icon ? `${c.icon} ${c.name}` : c.name}</Text>
+                <Text style={styles.pickerRowText}>{emojiIcon(c.icon) ? `${emojiIcon(c.icon)} ${c.name}` : c.name}</Text>
                 {catalogueId === c.id && <Text style={styles.pickerCheck}>✓</Text>}
               </Pressable>
             )}

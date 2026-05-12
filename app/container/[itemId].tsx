@@ -3,11 +3,12 @@ import { Text } from '../../components/Text';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
 import { useRef, useMemo } from 'react';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
-import { eq } from 'drizzle-orm';
+import { eq, and, isNotNull } from 'drizzle-orm';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { db } from '../../db';
 import { item, catalogue } from '../../schema';
 import { deleteItem, deleteContainer } from '../../sync';
+import { emojiIcon } from '../../utils';
 
 const STATUS_COLOURS: Record<string, string> = {
   active:   '#34c759',
@@ -75,6 +76,24 @@ export default function ContainerScreen() {
     allContainers?.forEach(c => map.set(c.id, { name: c.name, itemNumber: c.itemNumber, parentId: c.parentId }));
     return map;
   }, [allContainers]);
+
+  const { data: catSummaryRows } = useLiveQuery(
+    db.select({ parentId: item.parentId, catalogueName: catalogue.name })
+      .from(item)
+      .leftJoin(catalogue, eq(item.catalogueId, catalogue.id))
+      .where(and(eq(item.canContain, false), isNotNull(item.parentId)))
+  );
+
+  const cataloguesByContainer = useMemo(() => {
+    const map = new Map<string, string[]>();
+    catSummaryRows?.forEach(row => {
+      if (!row.parentId || !row.catalogueName) return;
+      const existing = map.get(row.parentId);
+      if (!existing) { map.set(row.parentId, [row.catalogueName]); return; }
+      if (!existing.includes(row.catalogueName)) existing.push(row.catalogueName);
+    });
+    return map;
+  }, [catSummaryRows]);
 
   const { data: children } = useLiveQuery(
     db.select({
@@ -155,7 +174,7 @@ export default function ContainerScreen() {
           )}
           renderItem={({ item: child }) => (
             child.canContain
-              ? <ContainerRow child={child} containerMap={containerMap} />
+              ? <ContainerRow child={child} containerMap={containerMap} cataloguesByContainer={cataloguesByContainer} />
               : <ItemRow child={child} containerMap={containerMap} />
           )}
           SectionSeparatorComponent={() => <View style={styles.sectionSep} />}
@@ -179,7 +198,7 @@ type Child = {
   catalogueIcon: string | null;
 };
 
-function ContainerRow({ child: c, containerMap }: { child: Child; containerMap: ContainerMap }) {
+function ContainerRow({ child: c, containerMap, cataloguesByContainer }: { child: Child; containerMap: ContainerMap; cataloguesByContainer: Map<string, string[]> }) {
   const swipeRef = useRef<Swipeable>(null);
 
   function renderRightActions() {
@@ -241,7 +260,13 @@ function ContainerRow({ child: c, containerMap }: { child: Child; containerMap: 
             <Text style={styles.numberText}>#{String(c.itemNumber).padStart(3, '0')}</Text>
           </View>
         )}
-        <Text style={[styles.rowName, c.itemNumber == null && styles.rowNameNobadge]}>{c.name}</Text>
+        <View style={[styles.rowBody, c.itemNumber == null && styles.rowBodyNobadge]}>
+          <Text style={styles.rowName}>{c.name}</Text>
+          {(() => {
+            const cats = cataloguesByContainer.get(c.id);
+            return cats?.length ? <Text style={styles.rowCatalogue}>{cats.join(', ')}</Text> : null;
+          })()}
+        </View>
         <Text style={styles.chevron}>›</Text>
       </Pressable>
     </Swipeable>
@@ -252,7 +277,7 @@ function ItemRow({ child: i, containerMap }: { child: Child; containerMap: Conta
   const swipeRef = useRef<Swipeable>(null);
   const statusColour = STATUS_COLOURS[i.status ?? 'active'] ?? '#8e8e93';
   const subtitle = [i.manufacturer, i.model].filter(Boolean).join(' ');
-  const catLabel = [i.catalogueIcon, i.catalogueName].filter(Boolean).join(' ');
+  const catLabel = [emojiIcon(i.catalogueIcon), i.catalogueName].filter(Boolean).join(' ');
 
   function renderRightActions() {
     return (

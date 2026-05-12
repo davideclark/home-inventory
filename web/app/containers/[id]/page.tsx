@@ -6,7 +6,7 @@ import Link from 'next/link';
 import ItemModal from '../../../components/ItemModal';
 import ConfirmDialog from '../../../components/ConfirmDialog';
 import { api } from '../../../lib/api';
-import type { Item } from '../../../lib/types';
+import type { Item, Catalogue } from '../../../lib/types';
 
 function buildBreadcrumb(id: string, map: Map<string, Item>): { id: string; name: string }[] {
   const crumbs: { id: string; name: string }[] = [];
@@ -32,11 +32,32 @@ export default function ContainerPage() {
     queryFn: () => api.items.list<Item[]>({ parentId: id }),
   });
 
+  const { data: allLeafItems = [] } = useQuery({
+    queryKey: ['leaf-items'],
+    queryFn: () => api.items.list<Item[]>({ canContain: 'false' }),
+  });
+
+  const { data: catalogues = [] } = useQuery({
+    queryKey: ['catalogues'],
+    queryFn: () => api.catalogues.list<Catalogue[]>(),
+  });
+
   const containerMap = new Map(allContainers.map(c => [c.id, c]));
   const breadcrumbs  = buildBreadcrumb(id, containerMap);
 
   const subContainers = [...children].filter(c => c.canContain).sort((a, b) => a.name.localeCompare(b.name));
   const leafItems     = [...children].filter(c => !c.canContain).sort((a, b) => a.name.localeCompare(b.name));
+
+  const catalogueMap = new Map(catalogues.map(c => [c.id, c.name]));
+  const cataloguesByContainer = new Map<string, string[]>();
+  allLeafItems.forEach(it => {
+    if (!it.parentId || !it.catalogueId) return;
+    const catName = catalogueMap.get(it.catalogueId);
+    if (!catName) return;
+    const existing = cataloguesByContainer.get(it.parentId);
+    if (!existing) { cataloguesByContainer.set(it.parentId, [catName]); return; }
+    if (!existing.includes(catName)) existing.push(catName);
+  });
 
   const [addOpen, setAddOpen]     = useState(false);
   const [editItem, setEditItem]   = useState<Item | null>(null);
@@ -119,7 +140,10 @@ export default function ContainerPage() {
                     <span className="text-lg">📦</span>
                     <Link href={`/containers/${c.id}`} className="flex-1 hover:text-blue-500">
                       <div className="font-medium text-sm">{c.name}</div>
-                      {c.notes && <div className="text-xs text-gray-500 mt-0.5">{c.notes}</div>}
+                      {(() => {
+                        const cats = cataloguesByContainer.get(c.id);
+                        return cats?.length ? <div className="text-xs text-gray-400 mt-0.5">{cats.join(', ')}</div> : null;
+                      })()}
                     </Link>
                     <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button onClick={() => setEditItem(c)} className="btn-sm">Edit</button>

@@ -6,6 +6,7 @@ import { or, like, eq, asc, sql } from 'drizzle-orm';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { db } from '../../db';
 import { item, catalogue } from '../../schema';
+import { emojiIcon } from '../../utils';
 
 const STATUS_COLOURS: Record<string, string> = {
   active:   '#34c759',
@@ -101,7 +102,7 @@ export default function SearchScreen() {
           renderItem={({ item: r }) => {
             const statusColour = STATUS_COLOURS[r.status ?? 'active'] ?? '#8e8e93';
             const subtitle = [r.manufacturer, r.model].filter(Boolean).join(' ');
-            const catLabel = [r.catalogueIcon, r.catalogueName].filter(Boolean).join(' ');
+            const catLabel = [emojiIcon(r.catalogueIcon), r.catalogueName].filter(Boolean).join(' ');
             return (
               <Pressable
                 style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}

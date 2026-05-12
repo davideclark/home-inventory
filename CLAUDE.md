@@ -21,6 +21,7 @@ Requirements and data model are documented in Notion (for reference only):
 - **Database**: SQLite via `expo-sqlite` + Drizzle ORM
 - **Migrations**: `drizzle-kit` — run `npx drizzle-kit generate` after schema changes
 - **Sync**: `sync.ts` — push/pull against the REST API, last-write-wins on `last_modified`
+- **Fonts**: `@expo-google-fonts/manrope` + `expo-font` — Manrope loaded in `app/_layout.tsx`
 - **Builds**: EAS Build (`eas.json`) — `preview` profile for internal distribution (no App Store)
 - **Notion integration**: MCP server (`@notionhq/notion-mcp-server`) in `.claudecode.json`
 
@@ -38,9 +39,11 @@ Requirements and data model are documented in Notion (for reference only):
 - **Data fetching**: TanStack Query
 - **API access**: proxy route (`app/api/proxy/[...path]/route.ts`) forwards all requests to backend, adding token server-side
 - **Pages**: Catalogues, Items per catalogue, Containers (hierarchy), Search, Settings
+- **Fonts**: Manrope via `next/font/google` (self-hosted, CSS variable `--font-sans`), applied via `font-sans` Tailwind class
+- **Design system**: primary colour `#007AFF` as `bg-primary` / `hover:bg-primary-hover` / `active:bg-primary-active` in `tailwind.config.ts`; House-Box logo at `public/logo-mark.svg`
 - **Config**: `API_URL` and `API_TOKEN` env vars — set via Docker Compose in prod, `.env.local` in dev
 - **Production**: port 3001 — `http://192.168.1.201:3001` (local) or `http://100.110.8.60:3001` (Tailscale)
-- **Docker image**: `davideclark/home-inventory-web:latest` — multi-platform (amd64, arm64, arm/v7)
+- **Docker image**: `davideclark/home-inventory-web:latest` — multi-platform (amd64, arm64)
 
 ## Common Commands
 
@@ -135,6 +138,9 @@ app/
   setup.tsx                One-time server setup screen (not shown on startup — accessible if needed)
 
 components/
+  Text.tsx                 Wraps RN Text + TextInput to auto-apply the correct Manrope font
+                           variant based on fontWeight in the style prop. All screen files
+                           import Text/TextInput from here instead of react-native.
   SyncButton.tsx           ↻ button used in every tab header — self-contained local state,
                            calls sync() directly (header components are outside the React
                            context tree so context cannot be used here)
@@ -184,13 +190,15 @@ web/
     search/                Full-text search
     settings/              Connection status
   components/
-    Nav.tsx                Top navigation bar
+    Nav.tsx                Top navigation bar — House-Box logo + Manrope, bg-primary
     Modal.tsx              Reusable modal wrapper
     ConfirmDialog.tsx      Delete confirmation dialog
     ItemModal.tsx          Add/edit item form — all fields + container picker
   lib/
     api.ts                 Fetch wrappers for all API endpoints
     types.ts               TypeScript types mirroring server schema
+  public/
+    logo-mark.svg          House-Box SVG logo (blue #007AFF, 64×64 viewBox, no background)
   Dockerfile               Builds web container (standalone Next.js output)
   next.config.ts           output: standalone for Docker
 ```
@@ -263,6 +271,8 @@ All mutable tables carry `device_id`, `last_modified`, and `synced` for offline-
 - Container path display: load all `canContain=true` items into a `Map`, walk `parentId` chain upward. See `buildPath()` in `items/[catalogueId].tsx`.
 - **Header components** (headerLeft/headerRight in tab options) are rendered by React Navigation outside the screen's React tree — they cannot consume React context from providers inside the Stack. `SyncButton` uses local `useState` and calls `sync()` directly for this reason.
 - `.npmrc` sets `legacy-peer-deps=true` — required for `npx expo install` and EAS Build `npm ci` to resolve React peer dependency conflicts.
+- **Fonts**: 4 Manrope weights loaded in `app/_layout.tsx` via `useFonts` from `@expo-google-fonts/manrope`. The loading gate checks `!fontsLoaded || !success` so the app never renders before fonts are ready. `components/Text.tsx` wraps `Text`/`TextInput` and auto-maps `fontWeight` values (`400`/`500`/`600`/`700`) to the correct `Manrope_*` `fontFamily` — all screens import from there instead of react-native directly.
+- **App icon**: `assets/icon.png` (1024×1024), `assets/adaptive-icon.png` (1024×1024 white bg for Android safe zone), `assets/splash-icon.png` (512×512) — all show the House-Box logo. Generated via Python Pillow. Android `adaptiveIcon.backgroundColor` in `app.json` is `#007aff`.
 - **Expo web is not supported** — `expo-sqlite` requires `SharedArrayBuffer` on web which needs special server headers not provided by the Expo dev server. The web frontend is a separate Next.js app in `web/` that talks directly to the REST API.
 
 ### Backend

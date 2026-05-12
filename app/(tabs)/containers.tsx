@@ -2,10 +2,10 @@ import { FlatList, View, StyleSheet, Pressable } from 'react-native';
 import { Text } from '../../components/Text';
 import { router } from 'expo-router';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
-import { eq, isNull, and } from 'drizzle-orm';
+import { eq, isNull, and, isNotNull } from 'drizzle-orm';
 import { useMemo } from 'react';
 import { db } from '../../db';
-import { item } from '../../schema';
+import { item, catalogue } from '../../schema';
 
 function naturalSort(a: string, b: string): number {
   const re = /(\d+)/g;
@@ -32,10 +32,28 @@ export default function ContainersScreen() {
       .where(and(eq(item.canContain, true), isNull(item.parentId)))
   );
 
+  const { data: catSummaryRows } = useLiveQuery(
+    db.select({ parentId: item.parentId, catalogueName: catalogue.name })
+      .from(item)
+      .leftJoin(catalogue, eq(item.catalogueId, catalogue.id))
+      .where(and(eq(item.canContain, false), isNotNull(item.parentId)))
+  );
+
   const containers = useMemo(
     () => [...(rawContainers ?? [])].sort((a, b) => naturalSort(a.name, b.name)),
     [rawContainers]
   );
+
+  const cataloguesByContainer = useMemo(() => {
+    const map = new Map<string, string[]>();
+    catSummaryRows?.forEach(row => {
+      if (!row.parentId || !row.catalogueName) return;
+      const existing = map.get(row.parentId);
+      if (!existing) { map.set(row.parentId, [row.catalogueName]); return; }
+      if (!existing.includes(row.catalogueName)) existing.push(row.catalogueName);
+    });
+    return map;
+  }, [catSummaryRows]);
 
   if (!containers || containers.length === 0) {
     return (
@@ -64,6 +82,10 @@ export default function ContainersScreen() {
           <View style={[styles.rowBody, c.itemNumber == null && styles.rowBodyNobadge]}>
             <Text style={styles.rowName}>{c.name}</Text>
             {c.notes ? <Text style={styles.rowNotes}>{c.notes}</Text> : null}
+            {(() => {
+              const cats = cataloguesByContainer.get(c.id);
+              return cats?.length ? <Text style={styles.rowCatalogue}>{cats.join(', ')}</Text> : null;
+            })()}
           </View>
           <Text style={styles.chevron}>›</Text>
         </Pressable>
@@ -100,6 +122,7 @@ const styles = StyleSheet.create({
   rowBodyNobadge: { marginLeft: 4 },
   rowName: { fontSize: 16, fontWeight: '500', color: '#111' },
   rowNotes: { fontSize: 13, color: '#666', marginTop: 2 },
+  rowCatalogue: { fontSize: 11, color: '#aaa', marginTop: 2 },
   chevron: { fontSize: 20, color: '#ccc' },
   separator: { height: StyleSheet.hairlineWidth, backgroundColor: '#ddd', marginLeft: 76 },
 });

@@ -9,6 +9,7 @@ import { db } from '../../db';
 import { catalogue, item } from '../../schema';
 import type { Catalogue } from '../../schema';
 import { deleteCatalogue } from '../../sync';
+import { emojiIcon } from '../../utils';
 
 export default function CataloguesScreen() {
   const { data: catalogues } = useLiveQuery(
@@ -109,8 +110,8 @@ function CatalogueRow({ catalogue: cat }: { catalogue: Catalogue }) {
         onPress={() => router.push(`/items/${cat.id}`)}
       >
         <View style={styles.iconCell}>
-          {cat.icon
-            ? <Text style={styles.icon}>{cat.icon}</Text>
+          {emojiIcon(cat.icon)
+            ? <Text style={styles.icon}>{emojiIcon(cat.icon)}</Text>
             : <View style={styles.iconPlaceholder} />}
         </View>
         <View style={styles.rowBody}>

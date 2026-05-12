@@ -5,7 +5,7 @@ import Link from 'next/link';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import ItemModal from '../../components/ItemModal';
 import { api } from '../../lib/api';
-import type { Item } from '../../lib/types';
+import type { Item, Catalogue } from '../../lib/types';
 
 export default function ContainersPage() {
   const qc = useQueryClient();
@@ -14,11 +14,32 @@ export default function ContainersPage() {
     queryFn: () => api.items.list<Item[]>({ canContain: 'true' }),
   });
 
+  const { data: allLeafItems = [] } = useQuery({
+    queryKey: ['leaf-items'],
+    queryFn: () => api.items.list<Item[]>({ canContain: 'false' }),
+  });
+
+  const { data: catalogues = [] } = useQuery({
+    queryKey: ['catalogues'],
+    queryFn: () => api.catalogues.list<Catalogue[]>(),
+  });
+
   const roots = [...allContainers]
     .filter(c => !c.parentId)
     .sort((a, b) => a.name.localeCompare(b.name));
 
   const subContainerCount = (id: string) => allContainers.filter(c => c.parentId === id).length;
+
+  const catalogueMap = new Map(catalogues.map(c => [c.id, c.name]));
+  const cataloguesByContainer = new Map<string, string[]>();
+  allLeafItems.forEach(it => {
+    if (!it.parentId || !it.catalogueId) return;
+    const catName = catalogueMap.get(it.catalogueId);
+    if (!catName) return;
+    const existing = cataloguesByContainer.get(it.parentId);
+    if (!existing) { cataloguesByContainer.set(it.parentId, [catName]); return; }
+    if (!existing.includes(catName)) existing.push(catName);
+  });
 
   const [editItem, setEditItem] = useState<Item | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{
@@ -65,10 +86,13 @@ export default function ContainersPage() {
               <span className="text-xl">📦</span>
               <Link href={`/containers/${c.id}`} className="flex-1 hover:text-blue-500">
                 <div className="font-medium text-sm">{c.name}</div>
-                {c.notes && <div className="text-xs text-gray-500 mt-0.5">{c.notes}</div>}
                 {subContainerCount(c.id) > 0 && (
                   <div className="text-xs text-gray-400">{subContainerCount(c.id)} sub-containers</div>
                 )}
+                {(() => {
+                  const cats = cataloguesByContainer.get(c.id);
+                  return cats?.length ? <div className="text-xs text-gray-400 mt-0.5">{cats.join(', ')}</div> : null;
+                })()}
               </Link>
               <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                 <button onClick={() => setEditItem(c)} className="btn-sm">Edit</button>
