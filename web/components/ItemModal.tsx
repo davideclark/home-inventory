@@ -194,7 +194,7 @@ export default function ItemModal({ item, defaultCatalogueId, defaultParentId, o
             <select value={form.catalogueId} onChange={e => set('catalogueId', e.target.value)} className="select">
               <option value="">— none —</option>
               {[...catalogues].sort((a, b) => a.name.localeCompare(b.name)).map(c => (
-                <option key={c.id} value={c.id}>{c.icon ? `${c.icon} ` : ''}{c.name}</option>
+                <option key={c.id} value={c.id}>{c.icon && !c.icon.startsWith('si:') && !c.icon.startsWith('svg:') ? `${c.icon} ` : ''}{c.name}</option>
               ))}
             </select>
           </div>

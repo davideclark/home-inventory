@@ -97,10 +97,11 @@ API_TOKEN=<token>
 SERVER_NAME=David's Inventory
 ```
 
-**To rebuild and push the Docker image** (multi-platform, run from repo root):
+**To rebuild and push the Docker image** (run from repo root):
 ```bash
-docker buildx build --platform linux/amd64,linux/arm64,linux/arm/v7 -t davideclark/home-inventory-api:latest --push ./server
+docker buildx build --platform linux/amd64 -t davideclark/home-inventory-api:latest --push ./server
 ```
+> Note: arm platforms excluded — QEMU emulation is too slow. The NAS is amd64.
 
 **To deploy/update on NAS** (SSH on port 8888, user: david):
 ```bash

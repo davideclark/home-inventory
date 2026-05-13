@@ -52,6 +52,8 @@ export default function SearchScreen() {
             like(item.type,         `%${q}%`),
             like(item.notes,        `%${q}%`),
             like(item.barcode,      `%${q}%`),
+            sql`CAST(${item.itemNumber} AS TEXT) LIKE ${'%' + q + '%'}`,
+            ...(/^\d+$/.test(q) ? [eq(item.itemNumber, parseInt(q, 10))] : []),
           )
         : sql`1 = 0`)
       .orderBy(asc(item.itemNumber)),

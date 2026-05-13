@@ -1,6 +1,6 @@
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
-import { eq, gte, or, ilike } from 'drizzle-orm';
+import { eq, gte, or, ilike, sql } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import { randomUUID } from 'crypto';
 import { db } from './db';
@@ -86,12 +86,15 @@ app.get('/api/search', async (c) => {
   const q = (c.req.query('q') ?? '').trim();
   if (!q) return c.json([]);
   const pattern = `%${q}%`;
+  const numericVal = /^\d+$/.test(q) ? parseInt(q, 10) : null;
   const rows = await db.select().from(item).where(
     or(
       ilike(item.name, pattern),
       ilike(item.notes, pattern),
       ilike(item.manufacturer, pattern),
       ilike(item.model, pattern),
+      sql`CAST(${item.itemNumber} AS TEXT) ILIKE ${pattern}`,
+      ...(numericVal !== null ? [eq(item.itemNumber, numericVal)] : []),
     )
   ).orderBy(item.name).limit(100);
   return c.json(rows);

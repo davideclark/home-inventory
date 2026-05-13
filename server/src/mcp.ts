@@ -1,7 +1,7 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import { eq, or, ilike, isNull } from 'drizzle-orm';
+import { eq, or, ilike, isNull, sql } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 import { db } from './db';
 import { catalogue, item, syncTombstone } from './schema';
@@ -240,6 +240,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'search_items': {
         const q = `%${a.query}%`;
+        const numericVal = /^\d+$/.test(a.query) ? parseInt(a.query, 10) : null;
         let query = db.select().from(item).where(
           or(
             ilike(item.name,         q),
@@ -248,6 +249,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             ilike(item.type,         q),
             ilike(item.notes,        q),
             ilike(item.barcode,      q),
+            sql`CAST(${item.itemNumber} AS TEXT) ILIKE ${q}`,
+            ...(numericVal !== null ? [eq(item.itemNumber, numericVal)] : []),
           )
         ).$dynamic();
         if (a.catalogueId) query = query.where(eq(item.catalogueId, a.catalogueId));
