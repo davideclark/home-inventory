@@ -9,7 +9,6 @@ import { db } from '../../db';
 import { catalogue, item } from '../../schema';
 import type { Item } from '../../schema';
 import { deleteItem } from '../../sync';
-import { emojiIcon } from '../../utils';
 
 const STATUS_COLOURS: Record<string, string> = {
   active:   '#34c759',
@@ -51,7 +50,7 @@ export default function ItemListScreen() {
   }, [containerItems]);
 
   const cat = catData?.[0];
-  const title = cat ? `${emojiIcon(cat.icon) ? emojiIcon(cat.icon) + ' ' : ''}${cat.name}` : 'Items';
+  const title = cat?.name ?? 'Items';
 
   return (
     <>

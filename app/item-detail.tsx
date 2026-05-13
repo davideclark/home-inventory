@@ -6,7 +6,7 @@ import { eq } from 'drizzle-orm';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { db } from '../db';
 import { item, catalogue } from '../schema';
-import { emojiIcon } from '../utils';
+import CatalogueIcon from '../components/CatalogueIcon';
 
 const STATUS_COLOURS: Record<string, string> = {
   active:   '#34c759',
@@ -108,7 +108,15 @@ export default function ItemDetailScreen() {
         {/* Classification */}
         {(cat || i.manufacturer || i.model || i.type) && (
           <View style={styles.section}>
-            {cat && <Row label="Catalogue" value={emojiIcon(cat.icon) ? `${emojiIcon(cat.icon)} ${cat.name}` : cat.name} />}
+            {cat && (
+              <View style={styles.row}>
+                <Text style={styles.label}>Catalogue</Text>
+                <View style={styles.catalogueValue}>
+                  <CatalogueIcon value={cat.icon} size={14} />
+                  <Text style={styles.value}>{cat.name}</Text>
+                </View>
+              </View>
+            )}
             {i.manufacturer && <Row label="Manufacturer" value={i.manufacturer} />}
             {i.model && <Row label="Model" value={i.model} />}
             {i.type && <Row label="Type" value={i.type} />}
@@ -175,5 +183,6 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   label: { fontSize: 13, color: '#888', flex: 1 },
   value: { fontSize: 15, color: '#111', flex: 2, textAlign: 'right' },
+  catalogueValue: { flexDirection: 'row', alignItems: 'center', gap: 6, flex: 2, justifyContent: 'flex-end' },
   notes: { fontSize: 15, color: '#111', lineHeight: 22 },
 });

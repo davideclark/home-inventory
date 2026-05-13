@@ -10,7 +10,7 @@ import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { db } from '../db';
 import { item, catalogue } from '../schema';
 import { getDeviceId } from '../sync';
-import { emojiIcon } from '../utils';
+import CatalogueIcon from '../components/CatalogueIcon';
 
 function naturalSort(a: string, b: string): number {
   const re = /(\d+)/g;
@@ -76,7 +76,7 @@ export default function AddItemScreen() {
   useEffect(() => {
     if (!catalogueId || !catalogues || catalogueLabel) return;
     const cat = catalogues.find(c => c.id === catalogueId);
-    if (cat) setCatalogueLabel(emojiIcon(cat.icon) ? `${emojiIcon(cat.icon)} ${cat.name}` : cat.name);
+    if (cat) setCatalogueLabel(cat.name);
   }, [catalogueId, catalogues]);
 
   // Pre-fill container when launched from a container's + button
@@ -199,9 +199,14 @@ export default function AddItemScreen() {
           <View style={styles.section}>
             <Text style={styles.label}>Catalogue</Text>
             <Pressable style={styles.pickerField} onPress={() => setCataloguePickerVisible(true)}>
-              <Text style={selectedCatalogueId ? styles.pickerValue : styles.pickerPlaceholder}>
-                {selectedCatalogueId ? catalogueLabel : 'Select catalogue…'}
-              </Text>
+              {selectedCatalogueId ? (
+                <View style={styles.pickerIconRow}>
+                  <CatalogueIcon value={catalogues?.find(c => c.id === selectedCatalogueId)?.icon ?? null} size={18} />
+                  <Text style={styles.pickerValue}>{catalogues?.find(c => c.id === selectedCatalogueId)?.name ?? catalogueLabel}</Text>
+                </View>
+              ) : (
+                <Text style={styles.pickerPlaceholder}>Select catalogue…</Text>
+              )}
               {selectedCatalogueId ? (
                 <Pressable hitSlop={8} onPress={() => { setSelectedCatalogueId(null); setCatalogueLabel(''); }}>
                   <Text style={styles.clearBtn}>✕</Text>
@@ -294,11 +299,14 @@ export default function AddItemScreen() {
                 style={[styles.pickerRow, selectedCatalogueId === c.id && styles.pickerRowSelected]}
                 onPress={() => {
                   setSelectedCatalogueId(c.id);
-                  setCatalogueLabel(emojiIcon(c.icon) ? `${emojiIcon(c.icon)} ${c.name}` : c.name);
+                  setCatalogueLabel(c.name);
                   setCataloguePickerVisible(false);
                 }}
               >
-                <Text style={styles.pickerRowText}>{emojiIcon(c.icon) ? `${emojiIcon(c.icon)} ${c.name}` : c.name}</Text>
+                <View style={styles.pickerIconRow}>
+                  <CatalogueIcon value={c.icon} size={18} />
+                  <Text style={styles.pickerRowText}>{c.name}</Text>
+                </View>
                 {selectedCatalogueId === c.id && <Text style={styles.pickerCheck}>✓</Text>}
               </Pressable>
             )}
@@ -404,6 +412,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fafafa',
   },
   pickerValue: { flex: 1, fontSize: 16, color: '#111' },
+  pickerIconRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
   pickerPlaceholder: { flex: 1, fontSize: 16, color: '#aaa' },
   clearBtn: { fontSize: 14, color: '#999', paddingLeft: 8 },
   chevron: { fontSize: 22, color: '#ccc', lineHeight: 24 },

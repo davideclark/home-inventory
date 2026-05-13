@@ -7,7 +7,7 @@ import { or, like, eq, asc, sql } from 'drizzle-orm';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { db } from '../../db';
 import { item, catalogue } from '../../schema';
-import { emojiIcon } from '../../utils';
+import CatalogueIcon from '../../components/CatalogueIcon';
 
 const STATUS_COLOURS: Record<string, string> = {
   active:   '#34c759',
@@ -105,7 +105,6 @@ export default function SearchScreen() {
           renderItem={({ item: r }) => {
             const statusColour = STATUS_COLOURS[r.status ?? 'active'] ?? '#8e8e93';
             const subtitle = [r.manufacturer, r.model].filter(Boolean).join(' ');
-            const catLabel = [emojiIcon(r.catalogueIcon), r.catalogueName].filter(Boolean).join(' ');
             return (
               <Pressable
                 style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
@@ -119,7 +118,12 @@ export default function SearchScreen() {
                 <View style={[styles.rowBody, r.itemNumber == null && styles.rowBodyNobadge]}>
                   <Text style={styles.rowName}>{r.name}</Text>
                   {subtitle ? <Text style={styles.rowSubtitle}>{subtitle}</Text> : null}
-                  {catLabel ? <Text style={styles.rowCatalogue}>{catLabel}</Text> : null}
+                  {r.catalogueName ? (
+                    <View style={styles.rowCatalogueRow}>
+                      <CatalogueIcon value={r.catalogueIcon} size={12} />
+                      <Text style={styles.rowCatalogue}>{r.catalogueName}</Text>
+                    </View>
+                  ) : null}
                 </View>
                 {r.status && r.status !== 'active' && (
                   <View style={[styles.statusBadge, { backgroundColor: statusColour }]}>
@@ -183,7 +187,8 @@ const styles = StyleSheet.create({
   rowBodyNobadge: { marginLeft: 4 },
   rowName: { fontSize: 16, fontWeight: '500', color: '#111' },
   rowSubtitle: { fontSize: 13, color: '#666', marginTop: 2 },
-  rowCatalogue: { fontSize: 12, color: '#aaa', marginTop: 2 },
+  rowCatalogueRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
+  rowCatalogue: { fontSize: 12, color: '#aaa' },
   statusBadge: {
     borderRadius: 6,
     paddingHorizontal: 8,

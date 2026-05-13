@@ -8,7 +8,7 @@ import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { db } from '../../db';
 import { item, catalogue } from '../../schema';
 import { deleteItem, deleteContainer } from '../../sync';
-import { emojiIcon } from '../../utils';
+import CatalogueIcon from '../../components/CatalogueIcon';
 
 const STATUS_COLOURS: Record<string, string> = {
   active:   '#34c759',
@@ -277,7 +277,6 @@ function ItemRow({ child: i, containerMap }: { child: Child; containerMap: Conta
   const swipeRef = useRef<Swipeable>(null);
   const statusColour = STATUS_COLOURS[i.status ?? 'active'] ?? '#8e8e93';
   const subtitle = [i.manufacturer, i.model].filter(Boolean).join(' ');
-  const catLabel = [emojiIcon(i.catalogueIcon), i.catalogueName].filter(Boolean).join(' ');
 
   function renderRightActions() {
     return (
@@ -321,7 +320,12 @@ function ItemRow({ child: i, containerMap }: { child: Child; containerMap: Conta
         <View style={[styles.rowBody, i.itemNumber == null && styles.rowBodyNobadge]}>
           <Text style={styles.rowName}>{i.name}</Text>
           {subtitle ? <Text style={styles.rowSubtitle}>{subtitle}</Text> : null}
-          {catLabel ? <Text style={styles.rowCatalogue}>{catLabel}</Text> : null}
+          {i.catalogueName ? (
+            <View style={styles.rowCatalogueRow}>
+              <CatalogueIcon value={i.catalogueIcon} size={12} />
+              <Text style={styles.rowCatalogue}>{i.catalogueName}</Text>
+            </View>
+          ) : null}
         </View>
         {i.status && i.status !== 'active' && (
           <View style={[styles.statusBadge, { backgroundColor: statusColour }]}>
@@ -365,7 +369,8 @@ const styles = StyleSheet.create({
   rowBody: { flex: 1 },
   rowBodyNobadge: { marginLeft: 4 },
   rowSubtitle: { fontSize: 13, color: '#666', marginTop: 2 },
-  rowCatalogue: { fontSize: 11, color: '#aaa', marginTop: 2 },
+  rowCatalogueRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
+  rowCatalogue: { fontSize: 11, color: '#aaa' },
   statusBadge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, marginLeft: 8 },
   statusText: { fontSize: 12, fontWeight: '600', color: '#fff' },
   chevron: { fontSize: 20, color: '#ccc' },
