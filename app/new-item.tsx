@@ -8,8 +8,9 @@ import { useLocalSearchParams, router } from 'expo-router';
 import { eq } from 'drizzle-orm';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { db } from '../db';
-import { item } from '../schema';
+import { item, catalogue } from '../schema';
 import { getDeviceId } from '../sync';
+import { emojiIcon } from '../utils';
 
 function naturalSort(a: string, b: string): number {
   const re = /(\d+)/g;
@@ -49,6 +50,9 @@ export default function AddItemScreen() {
   const [parentId, setParentId] = useState<string | null>(null);
   const [parentLabel, setParentLabel] = useState('');
   const [pickerVisible, setPickerVisible] = useState(false);
+  const [selectedCatalogueId, setSelectedCatalogueId] = useState<string | null>(catalogueId ?? null);
+  const [catalogueLabel, setCatalogueLabel] = useState('');
+  const [cataloguePickerVisible, setCataloguePickerVisible] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const { data: rawContainers } = useLiveQuery(
@@ -61,6 +65,19 @@ export default function AddItemScreen() {
     () => [...(rawContainers ?? [])].sort((a, b) => naturalSort(a.name, b.name)),
     [rawContainers]
   );
+
+  const { data: catalogues } = useLiveQuery(
+    db.select({ id: catalogue.id, name: catalogue.name, icon: catalogue.icon })
+      .from(catalogue)
+      .orderBy(catalogue.name)
+  );
+
+  // Set initial catalogue label when launched from a catalogue's item list
+  useEffect(() => {
+    if (!catalogueId || !catalogues || catalogueLabel) return;
+    const cat = catalogues.find(c => c.id === catalogueId);
+    if (cat) setCatalogueLabel(emojiIcon(cat.icon) ? `${emojiIcon(cat.icon)} ${cat.name}` : cat.name);
+  }, [catalogueId, catalogues]);
 
   // Pre-fill container when launched from a container's + button
   useEffect(() => {
@@ -107,7 +124,7 @@ export default function AddItemScreen() {
     try {
       await db.insert(item).values({
         itemNumber: num,
-        catalogueId: catalogueId ?? null,
+        catalogueId: selectedCatalogueId ?? null,
         name: name.trim(),
         status,
         manufacturer: manufacturer.trim() || null,
@@ -178,6 +195,23 @@ export default function AddItemScreen() {
             </ScrollView>
           </View>
 
+          {/* Catalogue */}
+          <View style={styles.section}>
+            <Text style={styles.label}>Catalogue</Text>
+            <Pressable style={styles.pickerField} onPress={() => setCataloguePickerVisible(true)}>
+              <Text style={selectedCatalogueId ? styles.pickerValue : styles.pickerPlaceholder}>
+                {selectedCatalogueId ? catalogueLabel : 'Select catalogue…'}
+              </Text>
+              {selectedCatalogueId ? (
+                <Pressable hitSlop={8} onPress={() => { setSelectedCatalogueId(null); setCatalogueLabel(''); }}>
+                  <Text style={styles.clearBtn}>✕</Text>
+                </Pressable>
+              ) : (
+                <Text style={styles.chevron}>›</Text>
+              )}
+            </Pressable>
+          </View>
+
           {/* Classification */}
           <View style={styles.section}>
             <Text style={styles.label}>Manufacturer</Text>
@@ -242,6 +276,41 @@ export default function AddItemScreen() {
           </Pressable>
 
         </ScrollView>
+
+      {/* Catalogue picker */}
+      <Modal visible={cataloguePickerVisible} animationType="slide" presentationStyle="pageSheet">
+        <View style={styles.modal}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Select Catalogue</Text>
+            <Pressable onPress={() => setCataloguePickerVisible(false)}>
+              <Text style={styles.modalDone}>Done</Text>
+            </Pressable>
+          </View>
+          <FlatList
+            data={catalogues}
+            keyExtractor={(c) => c.id}
+            renderItem={({ item: c }) => (
+              <Pressable
+                style={[styles.pickerRow, selectedCatalogueId === c.id && styles.pickerRowSelected]}
+                onPress={() => {
+                  setSelectedCatalogueId(c.id);
+                  setCatalogueLabel(emojiIcon(c.icon) ? `${emojiIcon(c.icon)} ${c.name}` : c.name);
+                  setCataloguePickerVisible(false);
+                }}
+              >
+                <Text style={styles.pickerRowText}>{emojiIcon(c.icon) ? `${emojiIcon(c.icon)} ${c.name}` : c.name}</Text>
+                {selectedCatalogueId === c.id && <Text style={styles.pickerCheck}>✓</Text>}
+              </Pressable>
+            )}
+            ItemSeparatorComponent={() => <View style={styles.separator} />}
+            ListEmptyComponent={
+              <View style={styles.pickerEmpty}>
+                <Text style={styles.pickerEmptyText}>No catalogues available.</Text>
+              </View>
+            }
+          />
+        </View>
+      </Modal>
 
       {/* Container picker */}
       <Modal visible={pickerVisible} animationType="slide" presentationStyle="pageSheet">

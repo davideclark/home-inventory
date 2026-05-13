@@ -50,7 +50,12 @@ export default function SettingsScreen() {
       }
       const { name, requiresToken } = await discoverRes.json();
 
-      if (requiresToken && token.trim()) {
+      if (requiresToken && !token.trim()) {
+        setStatus('error');
+        setStatusMsg('This server requires a token.');
+        return;
+      }
+      if (requiresToken) {
         const authRes = await fetch(`${trimmedUrl}/api/catalogues`, {
           headers: { 'X-API-Token': token.trim() },
         });

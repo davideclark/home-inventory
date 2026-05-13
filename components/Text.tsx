@@ -1,3 +1,4 @@
+import React from 'react';
 import { Text as RNText, TextInput as RNTextInput, TextProps, TextInputProps, StyleSheet } from 'react-native';
 
 const WEIGHT_MAP: Record<string, string> = {
@@ -18,6 +19,6 @@ export function Text({ style, ...props }: TextProps) {
   return <RNText style={[{ fontFamily: fontForStyle(style) }, style]} {...props} />;
 }
 
-export function TextInput({ style, ...props }: TextInputProps) {
-  return <RNTextInput style={[{ fontFamily: 'Manrope_400Regular' }, style]} {...props} />;
-}
+export const TextInput = React.forwardRef<RNTextInput, TextInputProps>(({ style, ...props }, ref) => {
+  return <RNTextInput ref={ref} style={[{ fontFamily: 'Manrope_400Regular' }, style]} {...props} />;
+});

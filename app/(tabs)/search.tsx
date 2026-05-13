@@ -1,5 +1,6 @@
 import { View, FlatList, StyleSheet, Pressable, Keyboard } from 'react-native';
 import { Text, TextInput } from '../../components/Text';
+import type { TextInput as RNTextInput } from 'react-native';
 import { useState, useRef } from 'react';
 import { router } from 'expo-router';
 import { or, like, eq, asc, sql } from 'drizzle-orm';
@@ -22,7 +23,7 @@ const STATUS_COLOURS: Record<string, string> = {
 export default function SearchScreen() {
   const [query, setQuery] = useState('');
   const [focused, setFocused] = useState(false);
-  const inputRef = useRef<TextInput>(null);
+  const inputRef = useRef<RNTextInput>(null);
   const q = query.trim();
 
   function cancel() {
