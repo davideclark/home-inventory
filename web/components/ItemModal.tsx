@@ -1,7 +1,8 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import Modal from './Modal';
+import IconRenderer from './IconRenderer';
 import { api } from '../lib/api';
 import type { Catalogue, Item } from '../lib/types';
 
@@ -50,6 +51,8 @@ export default function ItemModal({ item, defaultCatalogueId, defaultParentId, o
   const [form, setForm] = useState<Form>(blank);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [catalogueOpen, setCatalogueOpen] = useState(false);
+  const catalogueRef = useRef<HTMLDivElement>(null);
 
   const { data: catalogues = [] } = useQuery({
     queryKey: ['catalogues'],
@@ -65,6 +68,15 @@ export default function ItemModal({ item, defaultCatalogueId, defaultParentId, o
   const sortedContainers = [...containers].sort((a, b) =>
     buildPath(a.id, containerMap).localeCompare(buildPath(b.id, containerMap))
   );
+
+  useEffect(() => {
+    if (!catalogueOpen) return;
+    function handle(e: MouseEvent) {
+      if (!catalogueRef.current?.contains(e.target as Node)) setCatalogueOpen(false);
+    }
+    document.addEventListener('mousedown', handle);
+    return () => document.removeEventListener('mousedown', handle);
+  }, [catalogueOpen]);
 
   useEffect(() => {
     if (item) {
@@ -86,6 +98,7 @@ export default function ItemModal({ item, defaultCatalogueId, defaultParentId, o
     } else {
       setForm({ ...blank, catalogueId: defaultCatalogueId ?? '', parentId: defaultParentId ?? '' });
     }
+    setCatalogueOpen(false);
   }, [item, defaultCatalogueId, defaultParentId]);
 
   function set(k: keyof Form, v: string | boolean) {
@@ -191,12 +204,49 @@ export default function ItemModal({ item, defaultCatalogueId, defaultParentId, o
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Catalogue</label>
-            <select value={form.catalogueId} onChange={e => set('catalogueId', e.target.value)} className="select">
-              <option value="">— none —</option>
-              {[...catalogues].sort((a, b) => a.name.localeCompare(b.name)).map(c => (
-                <option key={c.id} value={c.id}>{c.icon && !c.icon.startsWith('si:') && !c.icon.startsWith('svg:') ? `${c.icon} ` : ''}{c.name}</option>
-              ))}
-            </select>
+            <div ref={catalogueRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setCatalogueOpen(p => !p)}
+                className="select flex items-center gap-2 text-left w-full"
+              >
+                {form.catalogueId ? (
+                  <>
+                    <IconRenderer value={catalogues.find(c => c.id === form.catalogueId)?.icon ?? null} size={16} />
+                    <span className="flex-1 truncate">
+                      {catalogues.find(c => c.id === form.catalogueId)?.name}
+                    </span>
+                  </>
+                ) : (
+                  <span className="flex-1 text-gray-400">— none —</span>
+                )}
+                <span className="text-gray-400 text-xs">▾</span>
+              </button>
+              {catalogueOpen && (
+                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                  <button
+                    type="button"
+                    onClick={() => { set('catalogueId', ''); setCatalogueOpen(false); }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 text-gray-400"
+                  >
+                    — none —
+                  </button>
+                  {[...catalogues].sort((a, b) => a.name.localeCompare(b.name)).map(c => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => { set('catalogueId', c.id); setCatalogueOpen(false); }}
+                      className={`w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 text-left ${
+                        form.catalogueId === c.id ? 'bg-blue-50 text-blue-600' : ''
+                      }`}
+                    >
+                      <IconRenderer value={c.icon ?? null} size={16} />
+                      <span className="truncate">{c.name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Container</label>
