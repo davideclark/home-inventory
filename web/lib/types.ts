@@ -9,7 +9,6 @@ export type Catalogue = {
   name: string;
   icon: string | null;
   description: string | null;
-  isStructural: boolean;
   sortOrder: number | null;
   fields: FieldDef[] | null;
   createdAt: string;

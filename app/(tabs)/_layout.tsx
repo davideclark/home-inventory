@@ -17,7 +17,7 @@ export default function TabLayout() {
           ),
         }}
       />
-      <Tabs.Screen name="containers" options={{ title: 'Containers', headerLeft: () => <SyncButton /> }} />
+      <Tabs.Screen name="containers" options={{ title: 'Browse', headerLeft: () => <SyncButton /> }} />
       <Tabs.Screen name="search"     options={{ title: 'Search',     headerLeft: () => <SyncButton /> }} />
       <Tabs.Screen name="settings"   options={{ title: 'Settings',   headerShown: true }} />
     </Tabs>

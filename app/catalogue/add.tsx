@@ -60,7 +60,6 @@ export default function AddCatalogueScreen() {
         icon: icon.trim() || null,
         description: description.trim() || null,
         sortOrder: sortOrder ? parseInt(sortOrder, 10) : null,
-        isStructural: false,
         fields: fields.length > 0 ? JSON.stringify(fields) : null,
         deviceId: await getDeviceId(),
       });

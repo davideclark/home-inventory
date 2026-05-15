@@ -5,6 +5,7 @@ import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import { randomUUID } from 'crypto';
 import { db } from './db';
 import { catalogue, item, syncTombstone } from './schema';
+import { version as API_VERSION } from '../package.json';
 
 const API_TOKEN   = process.env.API_TOKEN   ?? '';
 const SERVER_NAME = process.env.SERVER_NAME ?? 'Home Inventory';
@@ -22,7 +23,7 @@ app.use('/api/*', async (c, next) => {
 });
 
 app.get('/api/health',   (c) => c.json({ status: 'ok' }));
-app.get('/api/discover', (c) => c.json({ name: SERVER_NAME, version: '1.0.0', requiresToken: !!API_TOKEN }));
+app.get('/api/discover', (c) => c.json({ name: SERVER_NAME, version: API_VERSION, requiresToken: !!API_TOKEN }));
 
 // ── Catalogues ──────────────────────────────────────────────────────────────
 

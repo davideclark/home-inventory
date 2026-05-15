@@ -14,15 +14,14 @@ function generateId(): string {
 
 // ---------------------------------------------------------------------------
 // catalogue
-// Groups items by category. is_structural = true for Locations and Containers
-// (excluded from inventory browse views and exports).
+// Groups items by category and defines custom spec fields for items in
+// the group. No structural flag — containers are identified by item.can_contain.
 // ---------------------------------------------------------------------------
 export const catalogue = sqliteTable('catalogue', {
   id:           text('id').primaryKey().$defaultFn(() => generateId()),
   name:         text('name').notNull(),
   icon:         text('icon'),
   description:  text('description'),
-  isStructural: integer('is_structural', { mode: 'boolean' }).notNull().default(false),
   sortOrder:    integer('sort_order'),
   fields:       text('fields'),                           // JSON array of FieldDef
   createdAt:    text('created_at').notNull().default(sql`(datetime('now'))`),

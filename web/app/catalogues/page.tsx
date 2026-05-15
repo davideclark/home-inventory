@@ -9,8 +9,8 @@ import IconPicker from '../../components/IconPicker';
 import { api } from '../../lib/api';
 import type { Catalogue, FieldDef } from '../../lib/types';
 
-type Form = { name: string; icon: string; description: string; isStructural: boolean; fields: FieldDef[] };
-const blank: Form = { name: '', icon: '', description: '', isStructural: false, fields: [] };
+type Form = { name: string; icon: string; description: string; fields: FieldDef[] };
+const blank: Form = { name: '', icon: '', description: '', fields: [] };
 
 function toKey(label: string): string {
   return label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 50);
@@ -36,7 +36,7 @@ export default function CataloguesPage() {
     setForm(blank); setError(''); setModal({ mode: 'add' });
   }
   function openEdit(cat: Catalogue) {
-    setForm({ name: cat.name, icon: cat.icon ?? '', description: cat.description ?? '', isStructural: cat.isStructural, fields: cat.fields ?? [] });
+    setForm({ name: cat.name, icon: cat.icon ?? '', description: cat.description ?? '', fields: cat.fields ?? [] });
     setError(''); setModal({ mode: 'edit', item: cat });
   }
   function closeModal() {
@@ -53,7 +53,6 @@ export default function CataloguesPage() {
         name: form.name.trim(),
         icon: form.icon.trim() || null,
         description: form.description.trim() || null,
-        isStructural: form.isStructural,
         fields: form.fields.length > 0 ? form.fields : null,
       };
       if (modal?.mode === 'edit' && modal.item) {
@@ -121,9 +120,6 @@ export default function CataloguesPage() {
                 <div className="font-medium text-sm">{cat.name}</div>
                 {cat.description && <div className="text-xs text-gray-400 truncate">{cat.description}</div>}
               </Link>
-              {cat.isStructural && (
-                <span className="text-xs text-gray-400 border border-gray-200 rounded px-1.5 py-0.5">structural</span>
-              )}
               <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                 <Link href={`/catalogues/${cat.id}`} className="btn-sm">View items</Link>
                 <button onClick={() => openEdit(cat)} className="btn-sm">Edit</button>
@@ -176,11 +172,6 @@ export default function CataloguesPage() {
               <label className="block text-xs font-medium text-gray-500 mb-1">Description</label>
               <textarea value={form.description} onChange={f('description')} className="input resize-none" rows={2} />
             </div>
-            <label className="flex items-center gap-2 cursor-pointer select-none">
-              <input type="checkbox" checked={form.isStructural} onChange={f('isStructural')} className="w-4 h-4 accent-blue-500" />
-              <span className="text-sm text-gray-700">Structural (location / container type)</span>
-            </label>
-
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label className="block text-xs font-medium text-gray-500">Custom Fields</label>

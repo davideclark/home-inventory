@@ -38,7 +38,7 @@ Requirements and data model are documented in Notion (for reference only):
 - **Framework**: Next.js 15 + Tailwind CSS
 - **Data fetching**: TanStack Query
 - **API access**: proxy route (`app/api/proxy/[...path]/route.ts`) forwards all requests to backend, adding token server-side
-- **Pages**: Catalogues, Items per catalogue, Containers (hierarchy), Search, Settings
+- **Pages**: Catalogues, Items per catalogue, Browse (hierarchy), Search, Settings
 - **Fonts**: Manrope via `next/font/google` (self-hosted, CSS variable `--font-sans`), applied via `font-sans` Tailwind class
 - **Design system**: primary colour `#007AFF` as `bg-primary` / `hover:bg-primary-hover` / `active:bg-primary-active` in `tailwind.config.ts`; House-Box logo at `public/logo-mark.svg`
 - **Config**: `API_URL` and `API_TOKEN` env vars — set via Docker Compose in prod, `.env.local` in dev
@@ -121,7 +121,7 @@ Get-Content docker-compose.prod.yml -Raw | ssh -p 8888 david@DS1621plus.local "c
 app/
   _layout.tsx              Root layout — GestureHandlerRootView + Stack + migrations + startup sync
   (tabs)/
-    _layout.tsx            Tab bar (Catalogues, Containers, Search, Settings)
+    _layout.tsx            Tab bar (Catalogues, Browse, Search, Settings)
     index.tsx              Catalogues list — sorted by name, swipe left Edit/Delete, tap to drill in
     containers.tsx         Root containers list — tap to drill into hierarchy
     search.tsx             Full-text search across all catalogues
@@ -213,7 +213,7 @@ web/
                                                   edit-item (modal)
                          + button → new-item (modal)
 
-  Containers          →  container/[itemId]  →  container/[itemId] (drill down)
+  Browse              →  container/[itemId]  →  container/[itemId] (drill down)
                                              →  item-detail (modal)
                          + button → new-item (modal, parentId pre-filled)
 
@@ -228,7 +228,7 @@ Modals use `presentation: 'modal'` in `_layout.tsx`.
 
 Five tables:
 
-- **`catalogue`** — item categories/templates. `is_structural = true` marks Locations and Containers (excluded from inventory browse/export). Has `icon` (emoji), `description`, `sort_order`, `fields` (JSON array of `FieldDef` — custom per-catalogue spec field definitions, e.g. `[{ key: "speed_mhz", label: "Speed (MHz)", type: "number" }]`). Types: `text | number | textarea`.
+- **`catalogue`** — groups items and defines custom spec fields for the group. Has `icon`, `description`, `sort_order`, `fields` (JSON array of `FieldDef` — custom per-catalogue spec field definitions, e.g. `[{ key: "speed_mhz", label: "Speed (MHz)", type: "number" }]`). Types: `text | number | textarea`. No structural flag — whether an item is a container is determined solely by `item.can_contain`.
 - **`item`** — entire physical hierarchy in one self-referencing table. `item_number` is nullable (containers/locations don't need a sticker). `parent_id` is a UUID self-ref. `spec` is a JSON blob for catalogue-specific fields — keys are defined by the parent catalogue's `fields` array; data is preserved when moving an item between catalogues (only displayed fields change). `can_contain` is per-item. CHECK constraint: `can_contain = 1 OR parent_id IS NOT NULL`.
 - **`settings`** — key/value store for app-level state. Keys: `device_id`, `last_sync_at`, `api_url`, `api_token`.
 - **`sync_tombstone`** — records deletes so they propagate across devices. `entity_type` is `'catalogue' | 'item'`, `entity_id` is the UUID of the deleted record. Mobile adds `synced` boolean (SQLite); server schema omits it. Always delete via `deleteItem()`/`deleteCatalogue()`/`deleteContainer()` in `sync.ts` — never call `db.delete()` directly, or the tombstone won't be created.
@@ -303,5 +303,5 @@ Tools available on `inventory` MCP: `list_catalogues`, `list_containers`, `get_i
 - 24 Notion databases imported via `server/src/import-notion.ts` (one-off script, keep for re-runs)
 - 187 inventory items + 38 location/container items in the hierarchy
 - Location hierarchy: Clarence Road → 9 rooms (Loft, Living Room, Bed Room, Games Room, Cinema Room, Shed 1–4) → containers/drawers → items
-- 2 structural catalogues: Locations (🏠), Containers (📦)
+- 2 legacy catalogues used for location/container items: Locations (🏠), Containers (📦) — no longer marked structural; items are containers by virtue of `can_contain = true`
 - Notion API token is in `.claudecode.json` under the `notion` MCP server env

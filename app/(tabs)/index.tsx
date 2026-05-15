@@ -15,7 +15,6 @@ export default function CataloguesScreen() {
   const { data: catalogues } = useLiveQuery(
     db.select()
       .from(catalogue)
-      .where(eq(catalogue.isStructural, false))
       .orderBy(asc(catalogue.name))
   );
 

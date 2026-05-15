@@ -1,0 +1,1 @@
+ALTER TABLE `catalogue` DROP COLUMN `is_structural`;

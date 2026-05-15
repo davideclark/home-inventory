@@ -36,6 +36,13 @@
       "when": 1778858313958,
       "tag": "0004_fancy_maverick",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1778869752168,
+      "tag": "0005_special_komodo",
+      "breakpoints": true
     }
   ]
 }
