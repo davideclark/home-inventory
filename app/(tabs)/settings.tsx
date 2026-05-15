@@ -1,7 +1,8 @@
 import { View, StyleSheet, Pressable, ActivityIndicator, ScrollView, Keyboard } from 'react-native';
 import { Text, TextInput } from '../../components/Text';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { useFocusEffect } from 'expo-router';
+import Constants from 'expo-constants';
 import { eq } from 'drizzle-orm';
 import { db } from '../../db';
 import { settings } from '../../schema';
@@ -133,6 +134,8 @@ export default function SettingsScreen() {
           <Text style={styles.disconnectText}>Disconnect</Text>
         </Pressable>
       ) : null}
+
+      <Text style={styles.versionText}>v{Constants.expoConfig?.version ?? '—'}</Text>
     </ScrollView>
   );
 }
@@ -153,4 +156,5 @@ const styles = StyleSheet.create({
   buttonText: { color: '#fff', fontSize: 17, fontWeight: '600' },
   disconnectButton: { alignItems: 'center', paddingVertical: 12 },
   disconnectText: { color: '#ff3b30', fontSize: 16 },
+  versionText: { fontSize: 12, color: '#bbb', textAlign: 'center', marginTop: 16 },
 });
