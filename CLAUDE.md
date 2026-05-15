@@ -228,8 +228,8 @@ Modals use `presentation: 'modal'` in `_layout.tsx`.
 
 Five tables:
 
-- **`catalogue`** — item categories/templates. `is_structural = true` marks Locations and Containers (excluded from inventory browse/export). Has `icon` (emoji), `description`, `sort_order`.
-- **`item`** — entire physical hierarchy in one self-referencing table. `item_number` is nullable (containers/locations don't need a sticker). `parent_id` is a UUID self-ref. `spec` is a JSON blob for catalogue-specific fields. `can_contain` is per-item. CHECK constraint: `can_contain = 1 OR parent_id IS NOT NULL`.
+- **`catalogue`** — item categories/templates. `is_structural = true` marks Locations and Containers (excluded from inventory browse/export). Has `icon` (emoji), `description`, `sort_order`, `fields` (JSON array of `FieldDef` — custom per-catalogue spec field definitions, e.g. `[{ key: "speed_mhz", label: "Speed (MHz)", type: "number" }]`). Types: `text | number | textarea`.
+- **`item`** — entire physical hierarchy in one self-referencing table. `item_number` is nullable (containers/locations don't need a sticker). `parent_id` is a UUID self-ref. `spec` is a JSON blob for catalogue-specific fields — keys are defined by the parent catalogue's `fields` array; data is preserved when moving an item between catalogues (only displayed fields change). `can_contain` is per-item. CHECK constraint: `can_contain = 1 OR parent_id IS NOT NULL`.
 - **`settings`** — key/value store for app-level state. Keys: `device_id`, `last_sync_at`, `api_url`, `api_token`.
 - **`sync_tombstone`** — records deletes so they propagate across devices. `entity_type` is `'catalogue' | 'item'`, `entity_id` is the UUID of the deleted record. Mobile adds `synced` boolean (SQLite); server schema omits it. Always delete via `deleteItem()`/`deleteCatalogue()`/`deleteContainer()` in `sync.ts` — never call `db.delete()` directly, or the tombstone won't be created.
 - **`sync_log`** — polymorphic audit trail. `entity_type` is `'catalogue' | 'item'`, `entity_id` is the UUID of the record. No DB-level FK — app-enforced.
@@ -279,6 +279,7 @@ All mutable tables carry `device_id`, `last_modified`, and `synced` for offline-
 ### Backend
 - PostgreSQL schema uses `jsonb` for the `spec` column (vs `text` in SQLite) — no shape validation, fully flexible per catalogue.
 - Spec field conversion: mobile stores spec as a JSON string; push serialises it to an object for PostgreSQL jsonb; pull stringifies it back for SQLite.
+- `catalogue.fields` is `jsonb` on PostgreSQL (auto-parsed) and `text` (JSON string) on SQLite. When a field key is renamed in the catalogue editor, `PUT /api/catalogues/:id` fetches all affected items and migrates the key in JavaScript (fetch → rename → update). Mobile `app/catalogue/[id].tsx` runs the same migration using SQLite json_set/json_remove. Both `/api/search` and MCP `search_items` include `CAST(spec AS TEXT) ILIKE` so custom field values are searchable.
 - Timestamps stored as ISO text strings in both mobile and server for lexicographic last-write-wins comparison. SQLite's `datetime('now')` default produces a non-ISO format — sync.ts normalises both formats via `toMs()` before comparing.
 - MCP server uses stdio transport — Claude Code spawns it as a local process via `.claudecode.json`. Also registered in Claude Desktop config. Restart the respective app after changing either config file. The MCP process is long-lived — if `mcp.ts` is changed mid-session, the running process still uses the old code; restart Claude Code to pick up changes.
 - `bulk_import` MCP tool does topological sort on items before inserting (parents before children).
