@@ -29,18 +29,18 @@ export default function IconRenderer({ value, size = 20, className = '' }: Props
     const icon = siBySlug.get(value.slice(3));
     if (!icon) return <span className={className}>?</span>;
     return (
-      <svg
-        role="img"
-        aria-label={icon.title}
-        viewBox="0 0 24 24"
-        width={size}
-        height={size}
-        fill={`#${icon.hex}`}
-        className={className}
-        style={{ flexShrink: 0 }}
-      >
-        <path d={icon.path} />
-      </svg>
+      <span className={className} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <svg
+          role="img"
+          aria-label={icon.title}
+          viewBox="0 0 24 24"
+          width={size}
+          height={size}
+          fill={`#${icon.hex}`}
+        >
+          <path d={icon.path} />
+        </svg>
+      </span>
     );
   }
 

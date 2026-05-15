@@ -46,8 +46,12 @@ export default function SettingsPage() {
           <span className="font-medium">{discover?.name ?? '—'}</span>
         </div>
         <div className="flex justify-between text-sm">
-          <span className="text-gray-500">Version</span>
+          <span className="text-gray-500">API version</span>
           <span className="font-medium">{discover?.version ?? '—'}</span>
+        </div>
+        <div className="flex justify-between text-sm">
+          <span className="text-gray-500">Web version</span>
+          <span className="font-medium">{process.env.NEXT_PUBLIC_APP_VERSION}</span>
         </div>
         <div className="flex justify-between text-sm">
           <span className="text-gray-500">Auth</span>

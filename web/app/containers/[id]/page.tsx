@@ -143,7 +143,9 @@ export default function ContainerPage() {
                       <div className="font-medium text-sm">{c.name}</div>
                       {(() => {
                         const cats = cataloguesByContainer.get(c.id);
-                        return cats?.length ? <div className="text-xs text-gray-400 mt-0.5">{cats.join(', ')}</div> : null;
+                        return cats?.length
+                          ? <div className="text-xs text-gray-400 mt-0.5">{cats.join(', ')}</div>
+                          : c.notes ? <div className="text-xs text-gray-400 mt-0.5">{c.notes}</div> : null;
                       })()}
                     </Link>
                     <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
