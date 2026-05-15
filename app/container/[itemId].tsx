@@ -58,7 +58,7 @@ export default function ContainerScreen() {
   const { itemId } = useLocalSearchParams<{ itemId: string }>();
 
   const { data: containerData } = useLiveQuery(
-    db.select({ id: item.id, name: item.name, itemNumber: item.itemNumber, parentId: item.parentId })
+    db.select({ id: item.id, name: item.name, itemNumber: item.itemNumber, parentId: item.parentId, notes: item.notes })
       .from(item)
       .where(eq(item.id, itemId))
       .limit(1)
@@ -155,6 +155,7 @@ export default function ContainerScreen() {
       {!children || children.length === 0 ? (
         <View style={styles.centered}>
           {breadcrumb ? <Text style={styles.breadcrumb}>{breadcrumb}</Text> : null}
+          {container?.notes ? <Text style={styles.containerNotes}>{container.notes}</Text> : null}
           <Text style={styles.emptyTitle}>Nothing here yet</Text>
           <Text style={styles.emptySubtitle}>Tap + to add an item to this container.</Text>
         </View>
@@ -164,9 +165,10 @@ export default function ContainerScreen() {
           keyExtractor={(child) => child.id}
           contentContainerStyle={styles.list}
           stickySectionHeadersEnabled={false}
-          ListHeaderComponent={breadcrumb ? (
+          ListHeaderComponent={(breadcrumb || container?.notes) ? (
             <View style={styles.breadcrumbRow}>
-              <Text style={styles.breadcrumb}>{breadcrumb}</Text>
+              {breadcrumb ? <Text style={styles.breadcrumb}>{breadcrumb}</Text> : null}
+              {container?.notes ? <Text style={styles.containerNotes}>{container.notes}</Text> : null}
             </View>
           ) : null}
           renderSectionHeader={({ section }) => (
@@ -344,6 +346,7 @@ const styles = StyleSheet.create({
   list: { paddingBottom: 8 },
   breadcrumbRow: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 },
   breadcrumb: { fontSize: 12, color: '#aaa' },
+  containerNotes: { fontSize: 13, color: '#666', marginTop: 4 },
   sectionHeader: { fontSize: 13, fontWeight: '600', color: '#888', paddingHorizontal: 16, paddingTop: 16, paddingBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 },
   sectionSep: { height: 0 },
   row: {
