@@ -45,6 +45,8 @@ export default function CataloguesPage() {
 
   async function save() {
     if (!form.name.trim()) { setError('Name is required.'); return; }
+    if (form.fields.some(f => !f.label.trim())) { setError('All custom fields must have a label.'); return; }
+    if (form.fields.some(f => !f.key.trim())) { setError('All custom fields must have a key.'); return; }
     setSaving(true); setError('');
     try {
       const data = {

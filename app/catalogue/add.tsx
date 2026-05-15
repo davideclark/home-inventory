@@ -45,6 +45,14 @@ export default function AddCatalogueScreen() {
       Alert.alert('Name required', 'Please enter a name for this catalogue.');
       return;
     }
+    if (fields.some(f => !f.label.trim())) {
+      Alert.alert('Field label required', 'All custom fields must have a label.');
+      return;
+    }
+    if (fields.some(f => !f.key.trim())) {
+      Alert.alert('Field key required', 'All custom fields must have a key.');
+      return;
+    }
     setSaving(true);
     try {
       await db.insert(catalogue).values({
