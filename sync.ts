@@ -253,14 +253,19 @@ async function pull(
 
   for (const sc of serverCats) {
     if (skipCatIds.has(sc.id) || tombstonedCatIds.has(sc.id)) continue;
+    const mapped = {
+      ...sc,
+      fields: sc.fields != null ? JSON.stringify(sc.fields) : null,
+      synced: true,
+    };
     const [existing] = await db.select().from(catalogue).where(eq(catalogue.id, sc.id)).limit(1);
     if (existing) {
       if (toMs(sc.lastModified) >= toMs(existing.lastModified)) {
-        await db.update(catalogue).set({ ...sc, synced: true }).where(eq(catalogue.id, sc.id));
+        await db.update(catalogue).set(mapped).where(eq(catalogue.id, sc.id));
         count++;
       }
     } else {
-      await db.insert(catalogue).values({ ...sc, synced: true }).onConflictDoNothing();
+      await db.insert(catalogue).values(mapped).onConflictDoNothing();
       count++;
     }
   }
