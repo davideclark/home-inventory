@@ -3,7 +3,7 @@ import { Text } from '../../components/Text';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
 import { useRef, useMemo } from 'react';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
-import { eq, and, isNotNull } from 'drizzle-orm';
+import { eq, isNotNull } from 'drizzle-orm';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { db } from '../../db';
 import { item, catalogue } from '../../schema';
@@ -81,7 +81,7 @@ export default function ContainerScreen() {
     db.select({ parentId: item.parentId, catalogueName: catalogue.name })
       .from(item)
       .leftJoin(catalogue, eq(item.catalogueId, catalogue.id))
-      .where(and(eq(item.canContain, false), isNotNull(item.parentId)))
+      .where(isNotNull(item.parentId))
   );
 
   const cataloguesByContainer = useMemo(() => {

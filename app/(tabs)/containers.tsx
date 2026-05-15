@@ -36,7 +36,7 @@ export default function ContainersScreen() {
     db.select({ parentId: item.parentId, catalogueName: catalogue.name })
       .from(item)
       .leftJoin(catalogue, eq(item.catalogueId, catalogue.id))
-      .where(and(eq(item.canContain, false), isNotNull(item.parentId)))
+      .where(isNotNull(item.parentId))
   );
 
   const containers = useMemo(

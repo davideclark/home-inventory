@@ -34,8 +34,8 @@ export default function ContainerPage() {
   });
 
   const { data: allLeafItems = [] } = useQuery({
-    queryKey: ['leaf-items'],
-    queryFn: () => api.items.list<Item[]>({ canContain: 'false' }),
+    queryKey: ['items-by-parent'],
+    queryFn: () => api.items.list<Item[]>(),
   });
 
   const { data: catalogues = [] } = useQuery({
