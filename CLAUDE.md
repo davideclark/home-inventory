@@ -125,7 +125,7 @@ app/
     index.tsx              Catalogues list — sorted by name, swipe left Edit/Delete, tap to drill in
     containers.tsx         Root containers list — tap to drill into hierarchy
     search.tsx             Full-text search across all catalogues
-    settings.tsx           Server config — URL + token entry, Test & Save, Disconnect
+    settings.tsx           Server config — URL + token entry, Test & Save, Disconnect; app version shown at bottom
   catalogue/
     add.tsx                Add Catalogue modal
     [id].tsx               Edit Catalogue modal (also handles delete)
@@ -279,7 +279,7 @@ All mutable tables carry `device_id`, `last_modified`, and `synced` for offline-
 ### Backend
 - PostgreSQL schema uses `jsonb` for the `spec` column (vs `text` in SQLite) — no shape validation, fully flexible per catalogue.
 - Spec field conversion: mobile stores spec as a JSON string; push serialises it to an object for PostgreSQL jsonb; pull stringifies it back for SQLite.
-- `catalogue.fields` is `jsonb` on PostgreSQL (auto-parsed) and `text` (JSON string) on SQLite. When a field key is renamed in the catalogue editor, `PUT /api/catalogues/:id` fetches all affected items and migrates the key in JavaScript (fetch → rename → update). Mobile `app/catalogue/[id].tsx` runs the same migration using SQLite json_set/json_remove. Both `/api/search` and MCP `search_items` include `CAST(spec AS TEXT) ILIKE` so custom field values are searchable.
+- `catalogue.fields` is `jsonb` on PostgreSQL (auto-parsed as an array) and `text` (JSON string) on SQLite. The pull path in `sync.ts` must `JSON.stringify(sc.fields)` before inserting into SQLite — same as spec. Omitting this causes an `InvalidConvertibleException` crash when syncing catalogues that have fields. When a field key is renamed in the catalogue editor, `PUT /api/catalogues/:id` fetches all affected items and migrates the key in JavaScript (fetch → rename → update). Mobile `app/catalogue/[id].tsx` runs the same migration using SQLite json_set/json_remove. Both `/api/search` and MCP `search_items` include `CAST(spec AS TEXT) ILIKE` so custom field values are searchable.
 - Timestamps stored as ISO text strings in both mobile and server for lexicographic last-write-wins comparison. SQLite's `datetime('now')` default produces a non-ISO format — sync.ts normalises both formats via `toMs()` before comparing.
 - MCP server uses stdio transport — Claude Code spawns it as a local process via `.claudecode.json`. Also registered in Claude Desktop config. Restart the respective app after changing either config file. The MCP process is long-lived — if `mcp.ts` is changed mid-session, the running process still uses the old code; restart Claude Code to pick up changes.
 - `bulk_import` MCP tool does topological sort on items before inserting (parents before children).
