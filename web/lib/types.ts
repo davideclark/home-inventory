@@ -1,3 +1,9 @@
+export type FieldDef = {
+  key: string;
+  label: string;
+  type: 'text' | 'number' | 'textarea';
+};
+
 export type Catalogue = {
   id: string;
   name: string;
@@ -5,6 +11,7 @@ export type Catalogue = {
   description: string | null;
   isStructural: boolean;
   sortOrder: number | null;
+  fields: FieldDef[] | null;
   createdAt: string;
   lastModified: string;
   deviceId: string;

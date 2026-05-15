@@ -6,8 +6,14 @@ async function req<T>(path: string, options?: RequestInit): Promise<T> {
     ...options,
   });
   if (!res.ok) {
-    const text = await res.text().catch(() => String(res.status));
-    throw new Error(text || String(res.status));
+    let message: string;
+    try {
+      const body = await res.json();
+      message = body.error ?? String(res.status);
+    } catch {
+      message = await res.text().catch(() => '') || String(res.status);
+    }
+    throw new Error(message);
   }
   return res.json() as Promise<T>;
 }

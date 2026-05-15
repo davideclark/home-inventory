@@ -12,6 +12,8 @@ import { item, catalogue } from '../schema';
 import { getDeviceId } from '../sync';
 import CatalogueIcon from '../components/CatalogueIcon';
 
+type FieldDef = { key: string; label: string; type: 'text' | 'number' | 'textarea' };
+
 function naturalSort(a: string, b: string): number {
   const re = /(\d+)/g;
   const ap = a.split(re);
@@ -53,6 +55,7 @@ export default function AddItemScreen() {
   const [selectedCatalogueId, setSelectedCatalogueId] = useState<string | null>(catalogueId ?? null);
   const [catalogueLabel, setCatalogueLabel] = useState('');
   const [cataloguePickerVisible, setCataloguePickerVisible] = useState(false);
+  const [spec, setSpec] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
 
   const { data: rawContainers } = useLiveQuery(
@@ -67,7 +70,7 @@ export default function AddItemScreen() {
   );
 
   const { data: catalogues } = useLiveQuery(
-    db.select({ id: catalogue.id, name: catalogue.name, icon: catalogue.icon })
+    db.select({ id: catalogue.id, name: catalogue.name, icon: catalogue.icon, fields: catalogue.fields })
       .from(catalogue)
       .orderBy(catalogue.name)
   );
@@ -122,6 +125,16 @@ export default function AddItemScreen() {
     }
     setSaving(true);
     try {
+      const selectedCatFields: FieldDef[] = (() => {
+        const cat = catalogues?.find(c => c.id === selectedCatalogueId);
+        try { return cat?.fields ? JSON.parse(cat.fields) : []; } catch { return []; }
+      })();
+      const specToSave: Record<string, string | number> = {};
+      for (const field of selectedCatFields) {
+        const val = spec[field.key] ?? '';
+        if (val !== '') specToSave[field.key] = field.type === 'number' ? Number(val) : val;
+      }
+
       await db.insert(item).values({
         itemNumber: num,
         catalogueId: selectedCatalogueId ?? null,
@@ -136,6 +149,7 @@ export default function AddItemScreen() {
         notes: notes.trim() || null,
         canContain,
         parentId,
+        spec: Object.keys(specToSave).length > 0 ? JSON.stringify(specToSave) : null,
         deviceId: await getDeviceId(),
       });
       router.back();
@@ -246,6 +260,34 @@ export default function AddItemScreen() {
               textAlignVertical="top"
             />
           </View>
+
+          {/* Custom spec fields */}
+          {(() => {
+            const cat = catalogues?.find(c => c.id === selectedCatalogueId);
+            let catFields: FieldDef[] = [];
+            try { catFields = cat?.fields ? JSON.parse(cat.fields) : []; } catch { catFields = []; }
+            if (catFields.length === 0) return null;
+            return (
+              <View style={styles.section}>
+                <Text style={styles.label}>Custom Fields</Text>
+                {catFields.map(field => (
+                  <View key={field.key}>
+                    <Text style={[styles.label, styles.mt]}>{field.label}</Text>
+                    <TextInput
+                      style={[styles.input, field.type === 'textarea' && styles.multiline]}
+                      value={spec[field.key] ?? ''}
+                      onChangeText={val => setSpec(prev => ({ ...prev, [field.key]: val }))}
+                      keyboardType={field.type === 'number' ? 'numeric' : 'default'}
+                      multiline={field.type === 'textarea'}
+                      numberOfLines={field.type === 'textarea' ? 3 : 1}
+                      textAlignVertical={field.type === 'textarea' ? 'top' : 'auto'}
+                      returnKeyType="next"
+                    />
+                  </View>
+                ))}
+              </View>
+            );
+          })()}
 
           {/* Container */}
           <View style={styles.section}>

@@ -41,6 +41,7 @@ export default function ContainersPage() {
     if (!existing.includes(catName)) existing.push(catName);
   });
 
+  const [addOpen, setAddOpen] = useState(false);
   const [editItem, setEditItem] = useState<Item | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{
     id: string; name: string; childCount: number; hasNonContainerChildren: boolean;
@@ -56,8 +57,9 @@ export default function ContainersPage() {
     });
   }
 
-  function afterEdit() {
+  function afterSave() {
     qc.invalidateQueries({ queryKey: ['containers'] });
+    setAddOpen(false);
     setEditItem(null);
   }
 
@@ -73,7 +75,10 @@ export default function ContainersPage() {
 
   return (
     <div>
-      <h1 className="text-xl font-semibold mb-4">Containers</h1>
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-xl font-semibold">Containers</h1>
+        <button onClick={() => setAddOpen(true)} className="btn-primary">+ Add Container</button>
+      </div>
 
       {isLoading ? (
         <p className="text-gray-400 text-sm">Loading…</p>
@@ -104,8 +109,11 @@ export default function ContainersPage() {
         </div>
       )}
 
+      {addOpen && (
+        <ItemModal defaultCanContain onSave={afterSave} onClose={() => setAddOpen(false)} />
+      )}
       {editItem && (
-        <ItemModal item={editItem} onSave={afterEdit} onClose={() => setEditItem(null)} />
+        <ItemModal item={editItem} onSave={afterSave} onClose={() => setEditItem(null)} />
       )}
 
       {deleteTarget && (() => {

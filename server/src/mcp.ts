@@ -250,6 +250,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             ilike(item.notes,        q),
             ilike(item.barcode,      q),
             sql`CAST(${item.itemNumber} AS TEXT) ILIKE ${q}`,
+            sql`CAST(${item.spec} AS TEXT) ILIKE ${q}`,
             ...(numericVal !== null ? [eq(item.itemNumber, numericVal)] : []),
           )
         ).$dynamic();

@@ -44,9 +44,33 @@ app.post('/api/catalogues', async (c) => {
 });
 
 app.put('/api/catalogues/:id', async (c) => {
+  const id = c.req.param('id');
   const body = await c.req.json();
+
+  // Migrate item spec data when field keys are renamed (position-matched)
+  const [existing] = await db.select({ fields: catalogue.fields }).from(catalogue).where(eq(catalogue.id, id)).limit(1);
+  const oldFields = (existing?.fields as any[] | null) ?? [];
+  const newFields = (body.fields as any[] | null) ?? [];
+  for (let i = 0; i < Math.min(oldFields.length, newFields.length); i++) {
+    const oldKey = oldFields[i]?.key as string | undefined;
+    const newKey = newFields[i]?.key as string | undefined;
+    if (oldKey && newKey && oldKey !== newKey) {
+      const affected = await db.select({ id: item.id, spec: item.spec })
+        .from(item)
+        .where(eq(item.catalogueId, id));
+      for (const row of affected) {
+        const s = row.spec as Record<string, unknown> | null;
+        if (s && oldKey in s) {
+          const updated = { ...s, [newKey]: s[oldKey] };
+          delete updated[oldKey];
+          await db.update(item).set({ spec: updated }).where(eq(item.id, row.id));
+        }
+      }
+    }
+  }
+
   const rows = await db.update(catalogue).set({ ...body, lastModified: new Date().toISOString() })
-    .where(eq(catalogue.id, c.req.param('id'))).returning();
+    .where(eq(catalogue.id, id)).returning();
   if (!rows[0]) return c.json({ error: 'Not found' }, 404);
   return c.json(rows[0]);
 });
@@ -94,6 +118,7 @@ app.get('/api/search', async (c) => {
       ilike(item.manufacturer, pattern),
       ilike(item.model, pattern),
       sql`CAST(${item.itemNumber} AS TEXT) ILIKE ${pattern}`,
+      sql`CAST(${item.spec} AS TEXT) ILIKE ${pattern}`,
       ...(numericVal !== null ? [eq(item.itemNumber, numericVal)] : []),
     )
   ).orderBy(item.name).limit(100);
@@ -114,10 +139,17 @@ app.post('/api/items', async (c) => {
 
 app.put('/api/items/:id', async (c) => {
   const body = await c.req.json();
-  const rows = await db.update(item).set({ ...body, lastModified: new Date().toISOString() })
-    .where(eq(item.id, c.req.param('id'))).returning();
-  if (!rows[0]) return c.json({ error: 'Not found' }, 404);
-  return c.json(rows[0]);
+  try {
+    const rows = await db.update(item).set({ ...body, lastModified: new Date().toISOString() })
+      .where(eq(item.id, c.req.param('id'))).returning();
+    if (!rows[0]) return c.json({ error: 'Not found' }, 404);
+    return c.json(rows[0]);
+  } catch (err: any) {
+    if (err.cause?.code === '23505' && err.cause?.constraint_name === 'item_item_number_unique') {
+      return c.json({ error: `Item number ${body.itemNumber} is already in use` }, 409);
+    }
+    throw err;
+  }
 });
 
 app.delete('/api/items/:id', async (c) => {

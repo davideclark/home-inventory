@@ -15,6 +15,13 @@
       "when": 1778329819328,
       "tag": "0001_powerful_bruce_banner",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1778858319645,
+      "tag": "0002_worried_toad_men",
+      "breakpoints": true
     }
   ]
 }

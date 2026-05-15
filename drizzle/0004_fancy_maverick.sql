@@ -1,0 +1,1 @@
+ALTER TABLE `catalogue` ADD `fields` text;

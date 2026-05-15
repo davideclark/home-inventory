@@ -12,6 +12,8 @@ import { item, catalogue } from '../schema';
 import { getDeviceId, deleteItem } from '../sync';
 import CatalogueIcon from '../components/CatalogueIcon';
 
+type FieldDef = { key: string; label: string; type: 'text' | 'number' | 'textarea' };
+
 function naturalSort(a: string, b: string): number {
   const re = /(\d+)/g;
   const ap = a.split(re);
@@ -53,7 +55,7 @@ export default function EditItemScreen() {
   );
 
   const { data: catalogues } = useLiveQuery(
-    db.select({ id: catalogue.id, name: catalogue.name, icon: catalogue.icon })
+    db.select({ id: catalogue.id, name: catalogue.name, icon: catalogue.icon, fields: catalogue.fields })
       .from(catalogue)
       .orderBy(asc(catalogue.name))
   );
@@ -75,6 +77,7 @@ export default function EditItemScreen() {
   const [catalogueLabel, setCatalogueLabel] = useState('');
   const [cataloguePickerVisible, setCataloguePickerVisible] = useState(false);
   const [pickerVisible, setPickerVisible] = useState(false);
+  const [spec, setSpec] = useState<Record<string, string>>({});
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -107,6 +110,16 @@ export default function EditItemScreen() {
       if (cat) {
         setCatalogueLabel(cat.name);
       }
+    }
+    if (existing.spec) {
+      try {
+        const parsed = JSON.parse(existing.spec);
+        const initial: Record<string, string> = {};
+        for (const [k, v] of Object.entries(parsed)) {
+          initial[k] = v != null ? String(v) : '';
+        }
+        setSpec(initial);
+      } catch { /* ignore */ }
     }
     setLoaded(true);
   }, [existing, containers, catalogues, loaded]);
@@ -148,6 +161,24 @@ export default function EditItemScreen() {
     }
     setSaving(true);
     try {
+      const selectedCatFields: FieldDef[] = (() => {
+        const cat = catalogues?.find(c => c.id === catalogueId);
+        try { return cat?.fields ? JSON.parse(cat.fields) : []; } catch { return []; }
+      })();
+      // Merge: preserve existing spec keys, overwrite with current catalogue's fields
+      const existingSpec: Record<string, string | number> = (() => {
+        try { return existing?.spec ? JSON.parse(existing.spec) : {}; } catch { return {}; }
+      })();
+      const specToSave: Record<string, string | number> = { ...existingSpec };
+      for (const field of selectedCatFields) {
+        const val = spec[field.key] ?? '';
+        if (val === '') {
+          delete specToSave[field.key];
+        } else {
+          specToSave[field.key] = field.type === 'number' ? Number(val) : val;
+        }
+      }
+
       await db.update(item)
         .set({
           itemNumber: num,
@@ -163,6 +194,7 @@ export default function EditItemScreen() {
           notes: notes.trim() || null,
           canContain,
           parentId,
+          spec: Object.keys(specToSave).length > 0 ? JSON.stringify(specToSave) : null,
           lastModified: new Date().toISOString(),
           synced: false,
           deviceId: await getDeviceId(),
@@ -302,6 +334,34 @@ export default function EditItemScreen() {
             textAlignVertical="top"
           />
         </View>
+
+        {/* Custom spec fields */}
+        {(() => {
+          const cat = catalogues?.find(c => c.id === catalogueId);
+          let catFields: FieldDef[] = [];
+          try { catFields = cat?.fields ? JSON.parse(cat.fields) : []; } catch { catFields = []; }
+          if (catFields.length === 0) return null;
+          return (
+            <View style={styles.section}>
+              <Text style={styles.label}>Custom Fields</Text>
+              {catFields.map(field => (
+                <View key={field.key}>
+                  <Text style={[styles.label, styles.mt]}>{field.label}</Text>
+                  <TextInput
+                    style={[styles.input, field.type === 'textarea' && styles.multiline]}
+                    value={spec[field.key] ?? ''}
+                    onChangeText={val => setSpec(prev => ({ ...prev, [field.key]: val }))}
+                    keyboardType={field.type === 'number' ? 'numeric' : 'default'}
+                    multiline={field.type === 'textarea'}
+                    numberOfLines={field.type === 'textarea' ? 3 : 1}
+                    textAlignVertical={field.type === 'textarea' ? 'top' : 'auto'}
+                    returnKeyType="next"
+                  />
+                </View>
+              ))}
+            </View>
+          );
+        })()}
 
         {/* Container */}
         <View style={styles.section}>

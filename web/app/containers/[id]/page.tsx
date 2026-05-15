@@ -6,6 +6,7 @@ import Link from 'next/link';
 import ItemModal from '../../../components/ItemModal';
 import ConfirmDialog from '../../../components/ConfirmDialog';
 import { api } from '../../../lib/api';
+import IconRenderer from '../../../components/IconRenderer';
 import type { Item, Catalogue } from '../../../lib/types';
 
 function buildBreadcrumb(id: string, map: Map<string, Item>): { id: string; name: string }[] {
@@ -48,11 +49,11 @@ export default function ContainerPage() {
   const subContainers = [...children].filter(c => c.canContain).sort((a, b) => a.name.localeCompare(b.name));
   const leafItems     = [...children].filter(c => !c.canContain).sort((a, b) => a.name.localeCompare(b.name));
 
-  const catalogueMap = new Map(catalogues.map(c => [c.id, c.name]));
+  const catalogueMap = new Map(catalogues.map(c => [c.id, c]));
   const cataloguesByContainer = new Map<string, string[]>();
   allLeafItems.forEach(it => {
     if (!it.parentId || !it.catalogueId) return;
-    const catName = catalogueMap.get(it.catalogueId);
+    const catName = catalogueMap.get(it.catalogueId)?.name;
     if (!catName) return;
     const existing = cataloguesByContainer.get(it.parentId);
     if (!existing) { cataloguesByContainer.set(it.parentId, [catName]); return; }
@@ -166,27 +167,33 @@ export default function ContainerPage() {
                     <tr className="border-b border-gray-100 text-left text-xs text-gray-400 font-medium">
                       <th className="px-4 py-3 w-16">#</th>
                       <th className="px-4 py-3">Name</th>
+                      <th className="px-4 py-3">Catalogue</th>
                       <th className="px-4 py-3">Manufacturer</th>
                       <th className="px-4 py-3">Model</th>
                       <th className="px-4 py-3 w-24"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
-                    {leafItems.map(it => (
+                    {leafItems.map(it => {
+                      const cat = it.catalogueId ? catalogueMap.get(it.catalogueId) : null;
+                      return (
                       <tr key={it.id} className="hover:bg-gray-50 group">
                         <td className="px-4 py-3 text-gray-400 font-mono text-xs">{itemNum(it)}</td>
                         <td className="px-4 py-3 font-medium">{it.name}</td>
+                        <td className="px-4 py-3 text-gray-500 text-xs">
+                          {cat ? <Link href={`/catalogues/${cat.id}`} className="flex items-center gap-1 hover:text-blue-500"><IconRenderer value={cat.icon ?? null} size={14} />{cat.name}</Link> : ''}
+                        </td>
                         <td className="px-4 py-3 text-gray-500">{it.manufacturer ?? ''}</td>
                         <td className="px-4 py-3 text-gray-500">{it.model ?? ''}</td>
                         <td className="px-4 py-3">
                           <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity justify-end">
                             <button onClick={() => setEditItem(it)} className="btn-sm">Edit</button>
                             <button onClick={() => setConfirmId(it.id)} className="btn-sm-danger">Delete</button>
-
                           </div>
                         </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

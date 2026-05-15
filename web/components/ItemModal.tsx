@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import Modal from './Modal';
 import IconRenderer from './IconRenderer';
 import { api } from '../lib/api';
-import type { Catalogue, Item } from '../lib/types';
+import type { Catalogue, FieldDef, Item } from '../lib/types';
 
 const STATUSES = ['active', 'untested', 'tested', 'faulty', 'stored', 'sold', 'donated', 'lost'] as const;
 
@@ -42,16 +42,18 @@ type Props = {
   item?: Item;
   defaultCatalogueId?: string;
   defaultParentId?: string;
+  defaultCanContain?: boolean;
   onSave: () => void;
   onClose: () => void;
 };
 
-export default function ItemModal({ item, defaultCatalogueId, defaultParentId, onSave, onClose }: Props) {
+export default function ItemModal({ item, defaultCatalogueId, defaultParentId, defaultCanContain, onSave, onClose }: Props) {
   const isEdit = !!item;
   const [form, setForm] = useState<Form>(blank);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [catalogueOpen, setCatalogueOpen] = useState(false);
+  const [specValues, setSpecValues] = useState<Record<string, string>>({});
   const catalogueRef = useRef<HTMLDivElement>(null);
 
   const { data: catalogues = [] } = useQuery({
@@ -95,8 +97,16 @@ export default function ItemModal({ item, defaultCatalogueId, defaultParentId, o
         barcode:      item.barcode ?? '',
         notes:        item.notes ?? '',
       });
+      const initial: Record<string, string> = {};
+      if (item.spec) {
+        for (const [k, v] of Object.entries(item.spec)) {
+          initial[k] = v != null ? String(v) : '';
+        }
+      }
+      setSpecValues(initial);
     } else {
-      setForm({ ...blank, catalogueId: defaultCatalogueId ?? '', parentId: defaultParentId ?? '' });
+      setForm({ ...blank, catalogueId: defaultCatalogueId ?? '', parentId: defaultParentId ?? '', canContain: defaultCanContain ?? false });
+      setSpecValues({});
     }
     setCatalogueOpen(false);
   }, [item, defaultCatalogueId, defaultParentId]);
@@ -121,6 +131,17 @@ export default function ItemModal({ item, defaultCatalogueId, defaultParentId, o
     setSaving(true);
     setError('');
     try {
+      const selectedCatalogue = catalogues.find(c => c.id === form.catalogueId);
+      const specToSave: Record<string, string | number> = { ...(item?.spec as Record<string, string | number> ?? {}) };
+      for (const field of selectedCatalogue?.fields ?? []) {
+        const val = specValues[field.key] ?? '';
+        if (val === '') {
+          delete specToSave[field.key];
+        } else {
+          specToSave[field.key] = field.type === 'number' ? Number(val) : val;
+        }
+      }
+
       const data = {
         name:         form.name.trim(),
         itemNumber,
@@ -135,6 +156,7 @@ export default function ItemModal({ item, defaultCatalogueId, defaultParentId, o
         colour:       form.colour.trim()        || null,
         barcode:      form.barcode.trim()       || null,
         notes:        form.notes.trim()         || null,
+        spec:         Object.keys(specToSave).length > 0 ? specToSave : null,
         deviceId:     'web',
         synced:       false,
         lastModified: new Date().toISOString(),
@@ -296,6 +318,39 @@ export default function ItemModal({ item, defaultCatalogueId, defaultParentId, o
           <textarea value={form.notes} onChange={e => set('notes', e.target.value)}
             className="input resize-none" rows={3} />
         </div>
+
+        {/* Custom spec fields from the selected catalogue */}
+        {(() => {
+          const fields: FieldDef[] = catalogues.find(c => c.id === form.catalogueId)?.fields ?? [];
+          if (fields.length === 0) return null;
+          return (
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-2">Custom Fields</label>
+              <div className="space-y-3">
+                {fields.map(field => (
+                  <div key={field.key}>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">{field.label}</label>
+                    {field.type === 'textarea' ? (
+                      <textarea
+                        value={specValues[field.key] ?? ''}
+                        onChange={e => setSpecValues(prev => ({ ...prev, [field.key]: e.target.value }))}
+                        className="input resize-none" rows={2}
+                      />
+                    ) : (
+                      <input
+                        type={field.type === 'number' ? 'number' : 'text'}
+                        value={specValues[field.key] ?? ''}
+                        onChange={e => setSpecValues(prev => ({ ...prev, [field.key]: e.target.value }))}
+                        className="input"
+                        inputMode={field.type === 'number' ? 'numeric' : undefined}
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
       </div>
     </Modal>
   );

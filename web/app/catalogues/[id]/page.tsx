@@ -31,12 +31,12 @@ export default function CatalogueItemsPage() {
 
   async function deleteItem(itemId: string) {
     await api.items.delete(itemId);
-    qc.invalidateQueries({ queryKey: ['items', id] });
+    qc.invalidateQueries({ queryKey: ['items'] });
     setConfirmId(null);
   }
 
   function afterSave() {
-    qc.invalidateQueries({ queryKey: ['items', id] });
+    qc.invalidateQueries({ queryKey: ['items'] });
     setAddOpen(false);
     setEditItem(null);
   }

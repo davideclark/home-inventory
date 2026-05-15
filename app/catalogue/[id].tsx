@@ -6,10 +6,17 @@ import { Text, TextInput } from '../../components/Text';
 import { useState, useEffect } from 'react';
 import { useLocalSearchParams, router } from 'expo-router';
 import { eq } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { db } from '../../db';
 import { catalogue, item } from '../../schema';
 import { deleteCatalogue } from '../../sync';
+
+type FieldDef = { key: string; label: string; type: 'text' | 'number' | 'textarea' };
+
+function toKey(label: string): string {
+  return label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 50);
+}
 
 export default function EditCatalogueScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -23,8 +30,26 @@ export default function EditCatalogueScreen() {
   const [icon, setIcon] = useState('');
   const [description, setDescription] = useState('');
   const [sortOrder, setSortOrder] = useState('');
+  const [fields, setFields] = useState<FieldDef[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  function addField() {
+    setFields(prev => [...prev, { key: '', label: '', type: 'text' }]);
+  }
+  function removeField(i: number) {
+    setFields(prev => prev.filter((_, j) => j !== i));
+  }
+  function updateField(i: number, k: keyof FieldDef, value: string) {
+    setFields(prev => {
+      const next = [...prev];
+      const old = next[i];
+      const updated = { ...old, [k]: value } as FieldDef;
+      if (k === 'label' && old.key === toKey(old.label)) updated.key = toKey(value);
+      next[i] = updated;
+      return next;
+    });
+  }
 
   // Populate form once the record loads
   useEffect(() => {
@@ -33,6 +58,11 @@ export default function EditCatalogueScreen() {
       setIcon(cat.icon ?? '');
       setDescription(cat.description ?? '');
       setSortOrder(cat.sortOrder != null ? String(cat.sortOrder) : '');
+      try {
+        setFields(cat.fields ? JSON.parse(cat.fields) : []);
+      } catch {
+        setFields([]);
+      }
       setLoaded(true);
     }
   }, [cat, loaded]);
@@ -44,12 +74,25 @@ export default function EditCatalogueScreen() {
     }
     setSaving(true);
     try {
+      // Migrate item spec data for renamed keys (position-matched)
+      const oldFields: FieldDef[] = cat?.fields ? JSON.parse(cat.fields) : [];
+      for (let i = 0; i < Math.min(oldFields.length, fields.length); i++) {
+        const oldKey = oldFields[i]?.key;
+        const newKey = fields[i]?.key;
+        if (oldKey && newKey && oldKey !== newKey) {
+          await db.run(
+            sql`UPDATE item SET spec = json_set(json_remove(spec, '$.' || ${oldKey}), '$.' || ${newKey}, json_extract(spec, '$.' || ${oldKey})) WHERE catalogue_id = ${id} AND json_extract(spec, '$.' || ${oldKey}) IS NOT NULL`
+          );
+        }
+      }
+
       await db.update(catalogue)
         .set({
           name: name.trim(),
           icon: icon.trim() || null,
           description: description.trim() || null,
           sortOrder: sortOrder ? parseInt(sortOrder, 10) : null,
+          fields: fields.length > 0 ? JSON.stringify(fields) : null,
           lastModified: new Date().toISOString(),
           synced: false,
         })
@@ -162,6 +205,46 @@ export default function EditCatalogueScreen() {
           />
         </View>
 
+        <View style={styles.section}>
+          <View style={styles.fieldsHeader}>
+            <Text style={styles.label}>Custom Fields</Text>
+            <Pressable onPress={addField}>
+              <Text style={styles.addFieldBtn}>+ Add Field</Text>
+            </Pressable>
+          </View>
+          {fields.length === 0 && (
+            <Text style={styles.fieldsEmpty}>No custom fields. Tap + Add Field to track catalogue-specific attributes.</Text>
+          )}
+          {fields.map((field, i) => (
+            <View key={i} style={styles.fieldRow}>
+              <View style={styles.fieldRowTop}>
+                <TextInput
+                  style={[styles.input, styles.fieldLabelInput]}
+                  value={field.label}
+                  onChangeText={val => updateField(i, 'label', val)}
+                  placeholder="Label (e.g. Speed MHz)"
+                  returnKeyType="next"
+                />
+                <Pressable onPress={() => removeField(i)} hitSlop={8}>
+                  <Text style={styles.removeField}>✕</Text>
+                </Pressable>
+              </View>
+              <Text style={styles.fieldKey}>{field.key || '—'}</Text>
+              <View style={styles.typeChips}>
+                {(['text', 'number', 'textarea'] as const).map(t => (
+                  <Pressable
+                    key={t}
+                    style={[styles.typeChip, field.type === t && styles.typeChipActive]}
+                    onPress={() => updateField(i, 'type', t)}
+                  >
+                    <Text style={[styles.typeChipText, field.type === t && styles.typeChipTextActive]}>{t}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          ))}
+        </View>
+
         <Pressable
           style={({ pressed }) => [
             styles.saveButton,
@@ -263,4 +346,33 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  fieldsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  addFieldBtn: { fontSize: 13, color: '#007AFF', fontWeight: '600' },
+  fieldsEmpty: { fontSize: 13, color: '#aaa', fontStyle: 'italic' },
+  fieldRow: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#eee',
+  },
+  fieldRowTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  fieldLabelInput: { flex: 1 },
+  fieldKey: { fontSize: 11, color: '#aaa', marginTop: 2, marginLeft: 2 },
+  removeField: { fontSize: 16, color: '#ccc' },
+  typeChips: { flexDirection: 'row', gap: 6, marginTop: 6 },
+  typeChip: {
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  typeChipActive: { backgroundColor: '#007AFF', borderColor: '#007AFF' },
+  typeChipText: { fontSize: 12, color: '#555' },
+  typeChipTextActive: { color: '#fff', fontWeight: '600' },
 });

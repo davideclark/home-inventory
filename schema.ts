@@ -24,6 +24,7 @@ export const catalogue = sqliteTable('catalogue', {
   description:  text('description'),
   isStructural: integer('is_structural', { mode: 'boolean' }).notNull().default(false),
   sortOrder:    integer('sort_order'),
+  fields:       text('fields'),                           // JSON array of FieldDef
   createdAt:    text('created_at').notNull().default(sql`(datetime('now'))`),
   lastModified: text('last_modified').notNull().default(sql`(datetime('now'))`),
   deviceId:     text('device_id').notNull(),

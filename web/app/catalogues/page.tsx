@@ -7,10 +7,14 @@ import ConfirmDialog from '../../components/ConfirmDialog';
 import IconRenderer from '../../components/IconRenderer';
 import IconPicker from '../../components/IconPicker';
 import { api } from '../../lib/api';
-import type { Catalogue } from '../../lib/types';
+import type { Catalogue, FieldDef } from '../../lib/types';
 
-type Form = { name: string; icon: string; description: string; isStructural: boolean };
-const blank: Form = { name: '', icon: '', description: '', isStructural: false };
+type Form = { name: string; icon: string; description: string; isStructural: boolean; fields: FieldDef[] };
+const blank: Form = { name: '', icon: '', description: '', isStructural: false, fields: [] };
+
+function toKey(label: string): string {
+  return label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 50);
+}
 
 export default function CataloguesPage() {
   const qc = useQueryClient();
@@ -32,7 +36,7 @@ export default function CataloguesPage() {
     setForm(blank); setError(''); setModal({ mode: 'add' });
   }
   function openEdit(cat: Catalogue) {
-    setForm({ name: cat.name, icon: cat.icon ?? '', description: cat.description ?? '', isStructural: cat.isStructural });
+    setForm({ name: cat.name, icon: cat.icon ?? '', description: cat.description ?? '', isStructural: cat.isStructural, fields: cat.fields ?? [] });
     setError(''); setModal({ mode: 'edit', item: cat });
   }
   function closeModal() {
@@ -48,6 +52,7 @@ export default function CataloguesPage() {
         icon: form.icon.trim() || null,
         description: form.description.trim() || null,
         isStructural: form.isStructural,
+        fields: form.fields.length > 0 ? form.fields : null,
       };
       if (modal?.mode === 'edit' && modal.item) {
         await api.catalogues.update(modal.item.id, data);
@@ -76,6 +81,23 @@ export default function CataloguesPage() {
 
   const f = (k: keyof Form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm(p => ({ ...p, [k]: (e.target as HTMLInputElement).type === 'checkbox' ? (e.target as HTMLInputElement).checked : e.target.value }));
+
+  function addField() {
+    setForm(p => ({ ...p, fields: [...p.fields, { key: '', label: '', type: 'text' as const }] }));
+  }
+  function removeField(i: number) {
+    setForm(p => ({ ...p, fields: p.fields.filter((_, j) => j !== i) }));
+  }
+  function updateField(i: number, k: keyof FieldDef, value: string) {
+    setForm(p => {
+      const fields = [...p.fields];
+      const old = fields[i];
+      const updated = { ...old, [k]: value } as FieldDef;
+      if (k === 'label' && old.key === toKey(old.label)) updated.key = toKey(value);
+      fields[i] = updated;
+      return { ...p, fields };
+    });
+  }
 
   return (
     <div>
@@ -114,6 +136,7 @@ export default function CataloguesPage() {
         <Modal
           title={modal.mode === 'add' ? 'Add Catalogue' : 'Edit Catalogue'}
           onClose={closeModal}
+          wide
           footer={
             <>
               <button onClick={closeModal} className="btn-secondary">Cancel</button>
@@ -155,6 +178,50 @@ export default function CataloguesPage() {
               <input type="checkbox" checked={form.isStructural} onChange={f('isStructural')} className="w-4 h-4 accent-blue-500" />
               <span className="text-sm text-gray-700">Structural (location / container type)</span>
             </label>
+
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-xs font-medium text-gray-500">Custom Fields</label>
+                <button type="button" onClick={addField} className="text-xs text-blue-500 hover:text-blue-600 font-medium">+ Add Field</button>
+              </div>
+              {form.fields.length === 0 ? (
+                <p className="text-xs text-gray-400">No custom fields. Add fields to track catalogue-specific attributes (e.g. Speed, Capacity).</p>
+              ) : (
+                <div className="space-y-2">
+                  {form.fields.map((field, i) => (
+                    <div key={i} className="flex gap-2 items-start bg-gray-50 rounded-lg p-2">
+                      <div className="flex-1 min-w-0">
+                        <input
+                          value={field.label}
+                          onChange={e => updateField(i, 'label', e.target.value)}
+                          className="input text-sm w-full"
+                          placeholder="Label (e.g. Speed MHz)"
+                        />
+                        <div className="flex items-center gap-1 mt-1">
+                          <span className="text-xs text-gray-400">key:</span>
+                          <input
+                            value={field.key}
+                            onChange={e => updateField(i, 'key', e.target.value)}
+                            className="text-xs text-gray-500 bg-transparent border-0 border-b border-dashed border-gray-300 focus:outline-none focus:border-gray-400 min-w-0 w-full"
+                            placeholder="auto"
+                          />
+                        </div>
+                      </div>
+                      <select
+                        value={field.type}
+                        onChange={e => updateField(i, 'type', e.target.value)}
+                        className="select text-sm w-28 shrink-0"
+                      >
+                        <option value="text">Text</option>
+                        <option value="number">Number</option>
+                        <option value="textarea">Multiline</option>
+                      </select>
+                      <button type="button" onClick={() => removeField(i)} className="text-gray-400 hover:text-red-500 mt-1.5 shrink-0">✕</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </Modal>
       )}

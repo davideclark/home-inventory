@@ -8,6 +8,7 @@ export const catalogue = pgTable('catalogue', {
   description:  text('description'),
   isStructural: boolean('is_structural').notNull().default(false),
   sortOrder:    integer('sort_order'),
+  fields:       jsonb('fields'),
   createdAt:    text('created_at').notNull().default(sql`to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`),
   lastModified: text('last_modified').notNull().default(sql`to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`),
   deviceId:     text('device_id').notNull().default('server'),
