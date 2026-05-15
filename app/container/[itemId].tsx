@@ -100,6 +100,7 @@ export default function ContainerScreen() {
         id: item.id,
         itemNumber: item.itemNumber,
         name: item.name,
+        notes: item.notes,
         status: item.status,
         manufacturer: item.manufacturer,
         model: item.model,
@@ -191,6 +192,7 @@ type Child = {
   id: string;
   itemNumber: number | null;
   name: string;
+  notes: string | null;
   status: string | null;
   manufacturer: string | null;
   model: string | null;
@@ -266,7 +268,9 @@ function ContainerRow({ child: c, containerMap, cataloguesByContainer }: { child
           <Text style={styles.rowName}>{c.name}</Text>
           {(() => {
             const cats = cataloguesByContainer.get(c.id);
-            return cats?.length ? <Text style={styles.rowCatalogue}>{cats.join(', ')}</Text> : null;
+            return cats?.length
+              ? <Text style={styles.rowCatalogue}>{cats.join(', ')}</Text>
+              : c.notes ? <Text style={styles.rowCatalogue}>{c.notes}</Text> : null;
           })()}
         </View>
         <Text style={styles.chevron}>›</Text>
