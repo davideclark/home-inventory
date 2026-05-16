@@ -27,6 +27,7 @@ export type Item = {
   notes: string | null;
   canContain: boolean;
   spec: Record<string, unknown> | null;
+  hasImage: boolean;
   createdAt: string;
   lastModified: string;
   deviceId: string;

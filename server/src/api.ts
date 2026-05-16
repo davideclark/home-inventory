@@ -3,12 +3,15 @@ import { Hono } from 'hono';
 import { eq, gte, or, ilike, sql } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import { randomUUID } from 'crypto';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, unlinkSync } from 'node:fs';
+import { join } from 'node:path';
 import { db } from './db';
 import { catalogue, item, syncTombstone } from './schema';
 import { version as API_VERSION } from '../package.json';
 
 const API_TOKEN   = process.env.API_TOKEN   ?? '';
 const SERVER_NAME = process.env.SERVER_NAME ?? 'Home Inventory';
+const IMAGE_PATH  = process.env.IMAGE_PATH  ?? './images';
 
 const app = new Hono();
 
@@ -189,6 +192,33 @@ app.delete('/api/items/:id', async (c) => {
   return c.json({ ok: true });
 });
 
+// ── Images ───────────────────────────────────────────────────────────────────
+
+app.post('/api/items/:id/image', async (c) => {
+  const id = c.req.param('id');
+  const body = await c.req.parseBody();
+  const file = body['file'];
+  if (!file || typeof file === 'string') return c.json({ error: 'No file provided' }, 400);
+  const buf = Buffer.from(await file.arrayBuffer());
+  writeFileSync(join(IMAGE_PATH, `${id}.jpg`), buf);
+  await db.update(item).set({ hasImage: true, lastModified: new Date().toISOString() }).where(eq(item.id, id));
+  return c.json({ ok: true });
+});
+
+app.get('/api/items/:id/image', async (c) => {
+  const filePath = join(IMAGE_PATH, `${c.req.param('id')}.jpg`);
+  if (!existsSync(filePath)) return c.json({ error: 'Not found' }, 404);
+  const buf = readFileSync(filePath);
+  return new Response(buf, { headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'max-age=3600' } });
+});
+
+app.delete('/api/items/:id/image', async (c) => {
+  const filePath = join(IMAGE_PATH, `${c.req.param('id')}.jpg`);
+  if (existsSync(filePath)) unlinkSync(filePath);
+  await db.update(item).set({ hasImage: false, lastModified: new Date().toISOString() }).where(eq(item.id, c.req.param('id')));
+  return c.json({ ok: true });
+});
+
 // ── Sync ─────────────────────────────────────────────────────────────────────
 
 app.get('/api/sync/pull', async (c) => {
@@ -253,6 +283,7 @@ app.post('/api/sync/push', async (c) => {
 });
 
 async function main() {
+  mkdirSync(IMAGE_PATH, { recursive: true });
   await migrate(db, { migrationsFolder: './drizzle' });
   const port = Number(process.env.PORT ?? 3000);
   serve({ fetch: app.fetch, port }, () => {

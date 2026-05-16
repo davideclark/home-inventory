@@ -95,7 +95,9 @@ DOCKERHUB_USERNAME=davideclark
 POSTGRES_PASSWORD=inventory_local
 API_TOKEN=<token>
 SERVER_NAME=David's Inventory
+IMAGES_PATH=/volume1/docker/home-inventory/images
 ```
+`IMAGES_PATH` is the host path mounted into the API container at `/images`. The API reads `IMAGE_PATH=/images` (set in `docker-compose.prod.yml`). The directory is created automatically on startup if it doesn't exist.
 
 **To rebuild and push the Docker image** (run from repo root):
 ```bash
@@ -229,7 +231,7 @@ Modals use `presentation: 'modal'` in `_layout.tsx`.
 Five tables:
 
 - **`catalogue`** — groups items and defines custom spec fields for the group. Has `icon`, `description`, `sort_order`, `fields` (JSON array of `FieldDef` — custom per-catalogue spec field definitions, e.g. `[{ key: "speed_mhz", label: "Speed (MHz)", type: "number", showInList: true }]`). Types: `text | number | textarea`. `showInList` controls which spec fields appear as subtitles in item list rows (mobile) or dedicated columns (web catalogue items page). No structural flag — whether an item is a container is determined solely by `item.can_contain`.
-- **`item`** — entire physical hierarchy in one self-referencing table. `item_number` is nullable (containers/locations don't need a sticker). `parent_id` is a UUID self-ref. `spec` is a JSON blob for all catalogue-specific fields — **this includes manufacturer, model, type, condition, colour, barcode, and status**, which are stored in spec rather than dedicated columns. Keys are defined by the parent catalogue's `fields` array; data is preserved when moving an item between catalogues. `can_contain` is per-item. CHECK constraint: `can_contain = 1 OR parent_id IS NOT NULL`.
+- **`item`** — entire physical hierarchy in one self-referencing table. `item_number` is nullable (containers/locations don't need a sticker). `parent_id` is a UUID self-ref. `spec` is a JSON blob for all catalogue-specific fields — **this includes manufacturer, model, type, condition, colour, barcode, and status**, which are stored in spec rather than dedicated columns. Keys are defined by the parent catalogue's `fields` array; data is preserved when moving an item between catalogues. `can_contain` is per-item. `has_image` boolean — true when a photo exists at `<IMAGE_PATH>/<id>.jpg` on the server. Images are served via `GET /api/items/:id/image` (token-protected). CHECK constraint: `can_contain = 1 OR parent_id IS NOT NULL`.
 - **`settings`** — key/value store for app-level state. Keys: `device_id`, `last_sync_at`, `api_url`, `api_token`.
 - **`sync_tombstone`** — records deletes so they propagate across devices. `entity_type` is `'catalogue' | 'item'`, `entity_id` is the UUID of the deleted record. Mobile adds `synced` boolean (SQLite); server schema omits it. Always delete via `deleteItem()`/`deleteCatalogue()`/`deleteContainer()` in `sync.ts` — never call `db.delete()` directly, or the tombstone won't be created.
 - **`sync_log`** — polymorphic audit trail. `entity_type` is `'catalogue' | 'item'`, `entity_id` is the UUID of the record. No DB-level FK — app-enforced.

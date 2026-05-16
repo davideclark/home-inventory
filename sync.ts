@@ -292,6 +292,29 @@ async function pull(
   return count;
 }
 
+export async function uploadItemImage(itemId: string, localUri: string): Promise<void> {
+  const apiUrl = await getApiUrl();
+  const headers = await authHeaders();
+  const form = new FormData();
+  form.append('file', { uri: localUri, name: 'photo.jpg', type: 'image/jpeg' } as unknown as Blob);
+  const res = await fetch(`${apiUrl}/api/items/${itemId}/image`, { method: 'POST', headers, body: form });
+  if (!res.ok) throw new Error('Image upload failed');
+  await db.update(item).set({ hasImage: true }).where(eq(item.id, itemId));
+}
+
+export async function deleteItemImage(itemId: string): Promise<void> {
+  const apiUrl = await getApiUrl();
+  const headers = await authHeaders();
+  await fetch(`${apiUrl}/api/items/${itemId}/image`, { method: 'DELETE', headers });
+  await db.update(item).set({ hasImage: false }).where(eq(item.id, itemId));
+}
+
+export async function getImageUrl(itemId: string): Promise<{ url: string; token: string | null }> {
+  const apiUrl = await getApiUrl();
+  const token = await getApiToken();
+  return { url: `${apiUrl}/api/items/${itemId}/image`, token };
+}
+
 export async function sync(): Promise<{ pushed: number; pulled: number }> {
   const since = (await getLastSyncAt()) ?? '1970-01-01T00:00:00Z';
   const { pushed, pushedItemIds, pushedCatIds, pushedTombstoneIds } = await push();

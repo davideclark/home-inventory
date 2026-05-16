@@ -7,6 +7,26 @@ import ConfirmDialog from '../../components/ConfirmDialog';
 import { api } from '../../lib/api';
 import type { Catalogue, Item } from '../../lib/types';
 
+function Thumb({ item }: { item: Item }) {
+  const [open, setOpen] = useState(false);
+  if (!item.hasImage) return <td className="px-2 py-2 w-12" />;
+  return (
+    <td className="px-2 py-2 w-12">
+      <img
+        src={api.images.url(item.id)}
+        alt=""
+        className="w-10 h-10 rounded object-cover cursor-zoom-in"
+        onClick={() => setOpen(true)}
+      />
+      {open && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center" onClick={() => setOpen(false)}>
+          <img src={api.images.url(item.id)} alt="" className="max-w-[90vw] max-h-[90vh] rounded-lg object-contain" onClick={e => e.stopPropagation()} />
+        </div>
+      )}
+    </td>
+  );
+}
+
 export default function SearchPage() {
   const qc = useQueryClient();
   const [query, setQuery]       = useState('');
@@ -67,6 +87,7 @@ export default function SearchPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100 text-left text-xs text-gray-400 font-medium">
+                <th className="px-2 py-3 w-12"></th>
                 <th className="px-4 py-3 w-16">#</th>
                 <th className="px-4 py-3">Name</th>
                 <th className="px-4 py-3">Catalogue</th>
@@ -78,6 +99,7 @@ export default function SearchPage() {
                 const cat = it.catalogueId ? catalogueMap.get(it.catalogueId) : null;
                 return (
                   <tr key={it.id} className="hover:bg-gray-50 group">
+                    <Thumb item={it} />
                     <td className="px-4 py-3 text-gray-400 font-mono text-xs tabular-nums">{itemNum(it)}</td>
                     <td className="px-4 py-3 font-medium">{it.name}</td>
                     <td className="px-4 py-3 text-gray-500 text-xs">

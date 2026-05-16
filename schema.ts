@@ -63,6 +63,7 @@ export const item = sqliteTable('item', {
   notes:        text('notes'),
   canContain:   integer('can_contain', { mode: 'boolean' }).notNull().default(false),
   spec:         text('spec'),                         // JSON blob
+  hasImage:     integer('has_image', { mode: 'boolean' }).notNull().default(false),
   createdAt:    text('created_at').notNull().default(sql`(datetime('now'))`),
   lastModified: text('last_modified').notNull().default(sql`(datetime('now'))`),
   deviceId:     text('device_id').notNull(),

@@ -20,7 +20,9 @@
         "ITSAppUsesNonExemptEncryption": false,
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
-        }
+        },
+        "NSPhotoLibraryUsageDescription": "Choose a photo for this item.",
+        "NSCameraUsageDescription": "Take a photo for this item."
       }
     },
     "android": {
@@ -37,7 +39,8 @@
     "plugins": [
       "expo-router",
       "expo-sqlite",
-      "expo-font"
+      "expo-font",
+      "expo-image-picker"
     ],
     "extra": {
       "router": {},

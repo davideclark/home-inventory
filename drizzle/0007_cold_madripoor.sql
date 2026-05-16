@@ -1,0 +1,1 @@
+ALTER TABLE `item` ADD `has_image` integer DEFAULT false NOT NULL;

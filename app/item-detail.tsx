@@ -1,17 +1,21 @@
-import { View, StyleSheet, ScrollView, Pressable } from 'react-native';
+import { View, StyleSheet, ScrollView, Pressable, useWindowDimensions } from 'react-native';
 import { Text } from '../components/Text';
+import { Image as ExpoImage } from 'expo-image';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
-import { useMemo } from 'react';
+import { useMemo, useEffect, useState } from 'react';
 import { eq } from 'drizzle-orm';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { db } from '../db';
 import { item, catalogue } from '../schema';
+import { getImageUrl } from '../sync';
 import CatalogueIcon from '../components/CatalogueIcon';
 
 type FieldDef = { key: string; label: string; type: string; showInList?: boolean };
 
 export default function ItemDetailScreen() {
   const { itemId } = useLocalSearchParams<{ itemId: string }>();
+  const { width } = useWindowDimensions();
+  const [imgSrc, setImgSrc] = useState<{ uri: string; headers?: Record<string, string> } | null>(null);
 
   const { data: itemData } = useLiveQuery(
     db.select().from(item).where(eq(item.id, itemId)).limit(1)
@@ -46,6 +50,13 @@ export default function ItemDetailScreen() {
     try { return i?.spec ? JSON.parse(i.spec) : {}; }
     catch { return {}; }
   }, [i?.spec]);
+
+  useEffect(() => {
+    if (!i?.hasImage) { setImgSrc(null); return; }
+    getImageUrl(i.id).then(({ url, token }) => {
+      setImgSrc({ uri: url, headers: token ? { 'X-API-Token': token } : undefined });
+    });
+  }, [i?.id, i?.hasImage]);
 
   if (!i) {
     return (
@@ -87,6 +98,17 @@ export default function ItemDetailScreen() {
         }}
       />
       <ScrollView style={styles.flex} contentContainerStyle={styles.content}>
+
+        {/* Photo */}
+        {imgSrc && (
+          <Pressable onPress={() => router.replace({ pathname: '/edit-item', params: { itemId } })}>
+            <ExpoImage
+              source={imgSrc}
+              style={{ width, height: width * 0.6 }}
+              contentFit="cover"
+            />
+          </Pressable>
+        )}
 
         {/* Name */}
         <View style={styles.section}>

@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Modal from './Modal';
 import IconRenderer from './IconRenderer';
 import { api } from '../lib/api';
@@ -39,11 +39,16 @@ type Props = {
 
 export default function ItemModal({ item, defaultCatalogueId, defaultParentId, defaultCanContain, onSave, onClose }: Props) {
   const isEdit = !!item;
+  const qc = useQueryClient();
   const [form, setForm] = useState<Form>(blank);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [catalogueOpen, setCatalogueOpen] = useState(false);
   const [specValues, setSpecValues] = useState<Record<string, string>>({});
+  const [imageKey, setImageKey] = useState(0);
+  const [imageUploading, setImageUploading] = useState(false);
+  const [hasImage, setHasImage] = useState(item?.hasImage ?? false);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
   const catalogueRef = useRef<HTMLDivElement>(null);
 
   const { data: catalogues = [] } = useQuery({
@@ -257,6 +262,70 @@ export default function ItemModal({ item, defaultCatalogueId, defaultParentId, d
           <label className="block text-xs font-medium text-gray-500 mb-1">Notes</label>
           <textarea value={form.notes} onChange={e => set('notes', e.target.value)}
             className="input resize-none" rows={3} />
+        </div>
+
+        {/* Photo */}
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-2">Photo</label>
+          {isEdit && item ? (
+            <div className="flex items-center gap-3">
+              {hasImage && (
+                <>
+                  <img
+                    key={imageKey}
+                    src={`${api.images.url(item.id)}?t=${imageKey}`}
+                    alt="Item photo"
+                    className="w-16 h-16 rounded-lg object-cover border border-gray-200 cursor-zoom-in"
+                    onClick={() => setLightboxOpen(true)}
+                  />
+                  {lightboxOpen && (
+                    <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center" onClick={() => setLightboxOpen(false)}>
+                      <img src={`${api.images.url(item.id)}?t=${imageKey}`} alt="" className="max-w-[90vw] max-h-[90vh] rounded-lg object-contain" onClick={e => e.stopPropagation()} />
+                    </div>
+                  )}
+                </>
+              )}
+              <div className="flex flex-col gap-1">
+                <label className={`btn-sm cursor-pointer ${imageUploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                  {imageUploading ? 'Uploading…' : hasImage ? 'Change photo' : 'Add photo'}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      setImageUploading(true);
+                      try {
+                        await api.images.upload(item.id, file);
+                        setHasImage(true);
+                        setImageKey(k => k + 1);
+                        qc.invalidateQueries({ queryKey: ['items'] });
+                      } catch { /* ignore */ }
+                      finally { setImageUploading(false); }
+                      e.target.value = '';
+                    }}
+                  />
+                </label>
+                {hasImage && (
+                  <button
+                    type="button"
+                    className="btn-sm-danger"
+                    onClick={async () => {
+                      await api.images.delete(item.id);
+                      setHasImage(false);
+                      setImageKey(k => k + 1);
+                      qc.invalidateQueries({ queryKey: ['items'] });
+                    }}
+                  >
+                    Remove photo
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-gray-400">Save item first to add a photo.</p>
+          )}
         </div>
 
         {/* Custom spec fields from the selected catalogue */}

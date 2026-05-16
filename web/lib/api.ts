@@ -1,8 +1,11 @@
 const BASE = '/api/proxy';
 
 async function req<T>(path: string, options?: RequestInit): Promise<T> {
+  const headers: Record<string, string> = options?.body instanceof FormData
+    ? {}
+    : { 'Content-Type': 'application/json' };
   const res = await fetch(`${BASE}/${path}`, {
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     ...options,
   });
   if (!res.ok) {
@@ -45,4 +48,14 @@ export const api = {
     },
   },
   search: <T = unknown>(q: string) => req<T>(`search?q=${encodeURIComponent(q)}`),
+  images: {
+    upload: (id: string, file: File): Promise<{ ok: boolean }> => {
+      const form = new FormData();
+      form.append('file', file);
+      return req(`items/${id}/image`, { method: 'POST', body: form });
+    },
+    delete: (id: string): Promise<{ ok: boolean }> =>
+      req(`items/${id}/image`, { method: 'DELETE' }),
+    url: (id: string) => `${BASE}/items/${id}/image`,
+  },
 };

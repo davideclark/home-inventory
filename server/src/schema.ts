@@ -23,6 +23,7 @@ export const item = pgTable('item', {
   notes:        text('notes'),
   canContain:   boolean('can_contain').notNull().default(false),
   spec:         jsonb('spec'),
+  hasImage:     boolean('has_image').notNull().default(false),
   createdAt:    text('created_at').notNull().default(sql`to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`),
   lastModified: text('last_modified').notNull().default(sql`to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`),
   deviceId:     text('device_id').notNull().default('server'),

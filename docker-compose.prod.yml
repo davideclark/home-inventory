@@ -24,6 +24,9 @@ services:
       PORT: 3000
       API_TOKEN: ${API_TOKEN:-}
       SERVER_NAME: ${SERVER_NAME:-Home Inventory}
+      IMAGE_PATH: /images
+    volumes:
+      - ${IMAGES_PATH:-/volume1/docker/home-inventory/images}:/images
     ports:
       - "${API_PORT:-3000}:3000"
     depends_on:

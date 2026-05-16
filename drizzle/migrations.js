@@ -8,6 +8,7 @@ import m0003 from './0003_orange_titania.sql';
 import m0004 from './0004_fancy_maverick.sql';
 import m0005 from './0005_special_komodo.sql';
 import m0006 from './0006_nostalgic_diamondback.sql';
+import m0007 from './0007_cold_madripoor.sql';
 
   export default {
     journal,
@@ -18,7 +19,8 @@ m0002,
 m0003,
 m0004,
 m0005,
-m0006
+m0006,
+m0007
     }
   }
   
