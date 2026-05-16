@@ -197,6 +197,7 @@ web/
     Modal.tsx              Reusable modal wrapper
     ConfirmDialog.tsx      Delete confirmation dialog
     ItemModal.tsx          Add/edit item form — all fields + container picker
+    ItemDetailModal.tsx    Read-only item detail dialog — image (with lightbox), all spec fields, notes, location path; Edit button opens ItemModal
   lib/
     api.ts                 Fetch wrappers for all API endpoints
     types.ts               TypeScript types mirroring server schema
@@ -268,6 +269,7 @@ All mutable tables carry `device_id`, `last_modified`, and `synced` for offline-
 - `GestureHandlerRootView` must wrap the root Stack in `app/_layout.tsx` — swipe gestures silently fail without it.
 - `device_id` in add/edit forms calls `await getDeviceId()` from `sync.ts` — returns a persistent UUID stored in the `settings` table.
 - `useLiveQuery` is used for all list screens — re-renders automatically on DB changes. Requires `enableChangeListener: true` in `db.ts`.
+- **`useLiveQuery` with dynamic parameters**: avoid passing a derived value (e.g. `i?.catalogueId ?? ''`) as a query parameter — if the initial value is empty, the query fires with the wrong SQL and may not re-fire when the value changes (it only re-fires on DB changes, not query parameter changes). Use a static query and filter in JS instead. See `item-detail.tsx` catalogue lookup as an example.
 - After any schema change: run `npx drizzle-kit generate`, then restart with `npx expo start --clear`.
 - Plain `r` in the Expo console reloads the JS bundle. Only restart the server (and rescan) after installing new native packages.
 - `automaticallyAdjustKeyboardInsets` on ScrollView handles keyboard insets on iOS (RN 0.81+) — do not use KeyboardAvoidingView.

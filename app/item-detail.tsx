@@ -22,13 +22,11 @@ export default function ItemDetailScreen() {
   );
   const i = itemData?.[0];
 
-  const { data: catalogueData } = useLiveQuery(
-    db.select({ name: catalogue.name, icon: catalogue.icon, fields: catalogue.fields })
+  const { data: allCatalogues } = useLiveQuery(
+    db.select({ id: catalogue.id, name: catalogue.name, icon: catalogue.icon, fields: catalogue.fields })
       .from(catalogue)
-      .where(eq(catalogue.id, i?.catalogueId ?? ''))
-      .limit(1)
   );
-  const cat = catalogueData?.[0];
+  const cat = allCatalogues?.find(c => c.id === i?.catalogueId);
 
   const { data: containerItems } = useLiveQuery(
     db.select({ id: item.id, name: item.name, itemNumber: item.itemNumber, parentId: item.parentId })

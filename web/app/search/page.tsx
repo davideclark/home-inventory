@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import ItemModal from '../../components/ItemModal';
+import ItemDetailModal from '../../components/ItemDetailModal';
 import IconRenderer from '../../components/IconRenderer';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { api } from '../../lib/api';
@@ -31,8 +32,9 @@ export default function SearchPage() {
   const qc = useQueryClient();
   const [query, setQuery]       = useState('');
   const [debounced, setDebounced] = useState('');
-  const [editItem, setEditItem]   = useState<Item | null>(null);
-  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [detailItem, setDetailItem] = useState<Item | null>(null);
+  const [editItem, setEditItem]     = useState<Item | null>(null);
+  const [confirmId, setConfirmId]   = useState<string | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setDebounced(query.trim()), 300);
@@ -101,7 +103,9 @@ export default function SearchPage() {
                   <tr key={it.id} className="hover:bg-gray-50 group">
                     <Thumb item={it} />
                     <td className="px-4 py-3 text-gray-400 font-mono text-xs tabular-nums">{itemNum(it)}</td>
-                    <td className="px-4 py-3 font-medium">{it.name}</td>
+                    <td className="px-4 py-3 font-medium">
+                      <button onClick={() => setDetailItem(it)} className="hover:text-blue-500 text-left">{it.name}</button>
+                    </td>
                     <td className="px-4 py-3 text-gray-500 text-xs">
                       {cat ? <span className="flex items-center gap-1"><IconRenderer value={cat.icon} size={14} />{cat.name}</span> : ''}
                     </td>
@@ -119,6 +123,13 @@ export default function SearchPage() {
         </div>
       )}
 
+      {detailItem && !editItem && (
+        <ItemDetailModal
+          item={detailItem}
+          onClose={() => setDetailItem(null)}
+          onEdit={() => { setEditItem(detailItem); setDetailItem(null); }}
+        />
+      )}
       {editItem && (
         <ItemModal
           item={editItem}

@@ -4,6 +4,7 @@ import { useParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import ItemModal from '../../../components/ItemModal';
+import ItemDetailModal from '../../../components/ItemDetailModal';
 import ConfirmDialog from '../../../components/ConfirmDialog';
 import { api } from '../../../lib/api';
 import IconRenderer from '../../../components/IconRenderer';
@@ -80,9 +81,10 @@ export default function ContainerPage() {
     if (!existing.includes(catName)) existing.push(catName);
   });
 
-  const [addOpen, setAddOpen]     = useState(false);
-  const [editItem, setEditItem]   = useState<Item | null>(null);
-  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [detailItem, setDetailItem] = useState<Item | null>(null);
+  const [addOpen, setAddOpen]       = useState(false);
+  const [editItem, setEditItem]     = useState<Item | null>(null);
+  const [confirmId, setConfirmId]   = useState<string | null>(null);
   const [deleteContainerTarget, setDeleteContainerTarget] = useState<{
     id: string; name: string; childCount: number; hasNonContainerChildren: boolean; parentId: string | null;
   } | null>(null);
@@ -208,7 +210,9 @@ export default function ContainerPage() {
                       <tr key={it.id} className="hover:bg-gray-50 group">
                         <Thumb item={it} />
                         <td className="px-4 py-3 text-gray-400 font-mono text-xs">{itemNum(it)}</td>
-                        <td className="px-4 py-3 font-medium">{it.name}</td>
+                        <td className="px-4 py-3 font-medium">
+                          <button onClick={() => setDetailItem(it)} className="hover:text-blue-500 text-left">{it.name}</button>
+                        </td>
                         <td className="px-4 py-3 text-gray-500 text-xs">{specDetails(it)}</td>
                         <td className="px-4 py-3 text-gray-500 text-xs">
                           {cat ? <Link href={`/catalogues/${cat.id}`} className="flex items-center gap-1 hover:text-blue-500"><IconRenderer value={cat.icon ?? null} size={14} />{cat.name}</Link> : ''}
@@ -236,6 +240,13 @@ export default function ContainerPage() {
 
       {addOpen && (
         <ItemModal defaultParentId={id} onSave={afterSave} onClose={() => setAddOpen(false)} />
+      )}
+      {detailItem && !editItem && (
+        <ItemDetailModal
+          item={detailItem}
+          onClose={() => setDetailItem(null)}
+          onEdit={() => { setEditItem(detailItem); setDetailItem(null); }}
+        />
       )}
       {editItem && (
         <ItemModal item={editItem} onSave={afterSave} onClose={() => setEditItem(null)} />

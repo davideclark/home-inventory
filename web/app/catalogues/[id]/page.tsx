@@ -4,6 +4,7 @@ import { useParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import ItemModal from '../../../components/ItemModal';
+import ItemDetailModal from '../../../components/ItemDetailModal';
 import ConfirmDialog from '../../../components/ConfirmDialog';
 import IconRenderer from '../../../components/IconRenderer';
 import { api } from '../../../lib/api';
@@ -45,9 +46,10 @@ export default function CatalogueItemsPage() {
 
   const sorted = [...items].sort((a, b) => a.name.localeCompare(b.name));
 
-  const [editItem, setEditItem]   = useState<Item | null>(null);
-  const [addOpen, setAddOpen]     = useState(false);
-  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [detailItem, setDetailItem] = useState<Item | null>(null);
+  const [editItem, setEditItem]     = useState<Item | null>(null);
+  const [addOpen, setAddOpen]       = useState(false);
+  const [confirmId, setConfirmId]   = useState<string | null>(null);
 
   async function deleteItem(itemId: string) {
     await api.items.delete(itemId);
@@ -104,7 +106,9 @@ export default function CatalogueItemsPage() {
                 <tr key={it.id} className="hover:bg-gray-50 group">
                   <Thumb item={it} />
                   <td className="px-4 py-3 text-gray-400 font-mono text-xs tabular-nums">{itemNum(it)}</td>
-                  <td className="px-4 py-3 font-medium">{it.name}</td>
+                  <td className="px-4 py-3 font-medium">
+                    <button onClick={() => setDetailItem(it)} className="hover:text-blue-500 text-left">{it.name}</button>
+                  </td>
                   {showInListFields.map(f => (
                     <td key={f.key} className="px-4 py-3 text-gray-500 text-xs">{it.spec?.[f.key] != null ? String(it.spec[f.key]) : ''}</td>
                   ))}
@@ -124,6 +128,13 @@ export default function CatalogueItemsPage() {
 
       {addOpen && (
         <ItemModal defaultCatalogueId={id} onSave={afterSave} onClose={() => setAddOpen(false)} />
+      )}
+      {detailItem && !editItem && (
+        <ItemDetailModal
+          item={detailItem}
+          onClose={() => setDetailItem(null)}
+          onEdit={() => { setEditItem(detailItem); setDetailItem(null); }}
+        />
       )}
       {editItem && (
         <ItemModal item={editItem} onSave={afterSave} onClose={() => setEditItem(null)} />
