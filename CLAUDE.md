@@ -288,6 +288,8 @@ All mutable tables carry `device_id`, `last_modified`, and `synced` for offline-
 - `API_TOKEN` env var gates all endpoints except `/api/health` and `/api/discover`. If not set, auth is skipped (dev mode).
 - `/api/discover` returns `{ name, version, requiresToken }` — used by the app's Settings screen to identify and verify the server.
 - API runs migrations automatically on startup via `drizzle-orm/postgres-js/migrator`.
+- **Image endpoints**: `POST /api/items/:id/image` (upload), `GET /api/items/:id/image` (serve), `DELETE /api/items/:id/image` (remove). Files stored at `<IMAGE_PATH>/<id>.jpg`. `IMAGE_PATH` env var defaults to `./images`; in prod it is `/images` (mapped to Docker volume). All three are token-protected.
+- **Backup/restore**: `GET /api/backup` returns a ZIP containing `data.json` (all catalogues + items) + `images/<id>.jpg` for each item with a photo. `POST /api/restore` accepts a multipart ZIP upload and does a full wipe-and-replace (sync_log → sync_tombstone → items → catalogues → image files, then reimports). Uses `jszip`. Exposed via web Settings page (Export Backup / Import Backup buttons).
 
 ## MCP Servers
 

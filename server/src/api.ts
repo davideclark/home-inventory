@@ -3,10 +3,11 @@ import { Hono } from 'hono';
 import { eq, gte, or, ilike, sql } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import { randomUUID } from 'crypto';
-import { readFileSync, writeFileSync, mkdirSync, existsSync, unlinkSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, unlinkSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import JSZip from 'jszip';
 import { db } from './db';
-import { catalogue, item, syncTombstone } from './schema';
+import { catalogue, item, syncTombstone, syncLog } from './schema';
 import { version as API_VERSION } from '../package.json';
 
 const API_TOKEN   = process.env.API_TOKEN   ?? '';
@@ -217,6 +218,79 @@ app.delete('/api/items/:id/image', async (c) => {
   if (existsSync(filePath)) unlinkSync(filePath);
   await db.update(item).set({ hasImage: false, lastModified: new Date().toISOString() }).where(eq(item.id, c.req.param('id')));
   return c.json({ ok: true });
+});
+
+// ── Backup / Restore ─────────────────────────────────────────────────────────
+
+app.get('/api/backup', async (c) => {
+  const [catalogues, items] = await Promise.all([
+    db.select().from(catalogue),
+    db.select().from(item),
+  ]);
+
+  const zip = new JSZip();
+  zip.file('data.json', JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), catalogues, items }, null, 2));
+
+  for (const it of items) {
+    if (it.hasImage) {
+      const filePath = join(IMAGE_PATH, `${it.id}.jpg`);
+      if (existsSync(filePath)) {
+        zip.folder('images')!.file(`${it.id}.jpg`, readFileSync(filePath));
+      }
+    }
+  }
+
+  const buf = await zip.generateAsync({ type: 'arraybuffer' });
+  return new Response(buf, {
+    headers: {
+      'Content-Type': 'application/zip',
+      'Content-Disposition': 'attachment; filename=home-inventory-backup.zip',
+    },
+  });
+});
+
+app.post('/api/restore', async (c) => {
+  const body = await c.req.parseBody();
+  const file = body['file'];
+  if (!file || typeof file === 'string') return c.json({ error: 'No file provided' }, 400);
+
+  const zip = await JSZip.loadAsync(await file.arrayBuffer());
+  const dataFile = zip.file('data.json');
+  if (!dataFile) return c.json({ error: 'Invalid backup: missing data.json' }, 400);
+
+  const data = JSON.parse(await dataFile.async('string'));
+
+  // Wipe (FK-safe order)
+  await db.delete(syncLog);
+  await db.delete(syncTombstone);
+  await db.delete(item);
+  await db.delete(catalogue);
+
+  // Delete all images
+  try {
+    for (const f of readdirSync(IMAGE_PATH).filter(f => f.endsWith('.jpg'))) {
+      unlinkSync(join(IMAGE_PATH, f));
+    }
+  } catch { /* directory may not exist */ }
+
+  // Import catalogues then items (maintains FK order)
+  for (const cat of data.catalogues ?? []) {
+    await db.insert(catalogue).values(cat).onConflictDoNothing();
+  }
+  for (const it of data.items ?? []) {
+    await db.insert(item).values(it).onConflictDoNothing();
+  }
+
+  // Import images
+  let imageCount = 0;
+  for (const imgFile of zip.file(/^images\/.+\.jpg$/)) {
+    const filename = imgFile.name.replace('images/', '');
+    const imgBuf = Buffer.from(await imgFile.async('arraybuffer'));
+    writeFileSync(join(IMAGE_PATH, filename), imgBuf);
+    imageCount++;
+  }
+
+  return c.json({ ok: true, catalogues: (data.catalogues ?? []).length, items: (data.items ?? []).length, images: imageCount });
 });
 
 // ── Sync ─────────────────────────────────────────────────────────────────────

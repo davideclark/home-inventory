@@ -25,7 +25,7 @@ async function proxy(req: NextRequest, path: string[]): Promise<NextResponse> {
 
   const upstream = await fetch(target, { method: req.method, headers, body });
 
-  if (isMultipart || upstream.headers.get('content-type')?.includes('image/')) {
+  if (isMultipart || upstream.headers.get('content-type')?.includes('image/') || upstream.headers.get('content-type')?.includes('application/zip')) {
     const buf = await upstream.arrayBuffer();
     return new NextResponse(buf, {
       status: upstream.status,
