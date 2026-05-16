@@ -60,14 +60,7 @@ export const item = sqliteTable('item', {
   catalogueId:  text('catalogue_id').references(() => catalogue.id),
   parentId:     text('parent_id'),                    // self-ref — see relations below
   name:         text('name').notNull(),
-  status:       text('status').default('active'),
   notes:        text('notes'),
-  manufacturer: text('manufacturer'),
-  model:        text('model'),
-  type:         text('type'),
-  condition:    text('condition'),
-  colour:       text('colour'),
-  barcode:      text('barcode'),
   canContain:   integer('can_contain', { mode: 'boolean' }).notNull().default(false),
   spec:         text('spec'),                         // JSON blob
   createdAt:    text('created_at').notNull().default(sql`(datetime('now'))`),

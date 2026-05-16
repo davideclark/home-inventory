@@ -10,22 +10,13 @@ import { catalogue, item } from '../../schema';
 import type { Item } from '../../schema';
 import { deleteItem } from '../../sync';
 
-const STATUS_COLOURS: Record<string, string> = {
-  active:   '#34c759',
-  untested: '#ff9500',
-  tested:   '#34c759',
-  faulty:   '#ff3b30',
-  stored:   '#8e8e93',
-  sold:     '#5856d6',
-  donated:  '#007AFF',
-  lost:     '#ff9500',
-};
+type FieldDef = { key: string; label: string; type: string; showInList?: boolean };
 
 export default function ItemListScreen() {
   const { catalogueId } = useLocalSearchParams<{ catalogueId: string }>();
 
   const { data: catData } = useLiveQuery(
-    db.select({ name: catalogue.name, icon: catalogue.icon })
+    db.select({ name: catalogue.name, icon: catalogue.icon, fields: catalogue.fields })
       .from(catalogue)
       .where(eq(catalogue.id, catalogueId))
       .limit(1)
@@ -51,6 +42,11 @@ export default function ItemListScreen() {
 
   const cat = catData?.[0];
   const title = cat?.name ?? 'Items';
+
+  const showInListFields = useMemo(() => {
+    try { return (JSON.parse(cat?.fields ?? '[]') as FieldDef[]).filter(f => f.showInList); }
+    catch { return []; }
+  }, [cat?.fields]);
 
   return (
     <>
@@ -81,7 +77,7 @@ export default function ItemListScreen() {
           data={items}
           keyExtractor={(i) => i.id}
           contentContainerStyle={styles.list}
-          renderItem={({ item: i }) => <ItemRow item={i} containerMap={containerMap} />}
+          renderItem={({ item: i }) => <ItemRow item={i} containerMap={containerMap} showInListFields={showInListFields} />}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
         />
       )}
@@ -104,10 +100,10 @@ function buildPath(parentId: string | null | undefined, map: ContainerMap): stri
   return parts.join(' › ');
 }
 
-function ItemRow({ item: i, containerMap }: { item: Item; containerMap: ContainerMap }) {
+function ItemRow({ item: i, containerMap, showInListFields }: { item: Item; containerMap: ContainerMap; showInListFields: FieldDef[] }) {
   const swipeRef = useRef<Swipeable>(null);
-  const statusColour = STATUS_COLOURS[i.status ?? 'active'] ?? '#8e8e93';
-  const subtitle = [i.manufacturer, i.model].filter(Boolean).join(' ');
+  const spec = i.spec ? JSON.parse(i.spec) : {};
+  const subtitle = showInListFields.map(f => spec[f.key]).filter(Boolean).join(' · ');
   const containerPath = buildPath(i.parentId, containerMap);
 
   function renderRightActions() {
@@ -169,11 +165,6 @@ function ItemRow({ item: i, containerMap }: { item: Item; containerMap: Containe
           {subtitle ? <Text style={styles.rowSubtitle}>{subtitle}</Text> : null}
           {containerPath ? <Text style={styles.rowPath}>{containerPath}</Text> : null}
         </View>
-        {i.status && i.status !== 'active' && (
-          <View style={[styles.statusBadge, { backgroundColor: statusColour }]}>
-            <Text style={styles.statusText}>{i.status}</Text>
-          </View>
-        )}
       </Pressable>
     </Swipeable>
   );
@@ -212,13 +203,6 @@ const styles = StyleSheet.create({
   rowName: { fontSize: 16, fontWeight: '500', color: '#111' },
   rowSubtitle: { fontSize: 13, color: '#666', marginTop: 2 },
   rowPath: { fontSize: 11, color: '#aaa', marginTop: 2 },
-  statusBadge: {
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    marginLeft: 8,
-  },
-  statusText: { fontSize: 12, fontWeight: '600', color: '#fff' },
   separator: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: '#ddd',

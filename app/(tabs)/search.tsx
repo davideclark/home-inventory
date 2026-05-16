@@ -9,17 +9,6 @@ import { db } from '../../db';
 import { item, catalogue } from '../../schema';
 import CatalogueIcon from '../../components/CatalogueIcon';
 
-const STATUS_COLOURS: Record<string, string> = {
-  active:   '#34c759',
-  untested: '#ff9500',
-  tested:   '#34c759',
-  faulty:   '#ff3b30',
-  stored:   '#8e8e93',
-  sold:     '#5856d6',
-  donated:  '#007AFF',
-  lost:     '#ff9500',
-};
-
 export default function SearchScreen() {
   const [query, setQuery] = useState('');
   const [focused, setFocused] = useState(false);
@@ -37,9 +26,6 @@ export default function SearchScreen() {
         id:           item.id,
         itemNumber:   item.itemNumber,
         name:         item.name,
-        manufacturer: item.manufacturer,
-        model:        item.model,
-        status:       item.status,
         catalogueName: catalogue.name,
         catalogueIcon: catalogue.icon,
       })
@@ -47,12 +33,9 @@ export default function SearchScreen() {
       .leftJoin(catalogue, eq(item.catalogueId, catalogue.id))
       .where(q.length >= 2
         ? or(
-            like(item.name,         `%${q}%`),
-            like(item.manufacturer, `%${q}%`),
-            like(item.model,        `%${q}%`),
-            like(item.type,         `%${q}%`),
-            like(item.notes,        `%${q}%`),
-            like(item.barcode,      `%${q}%`),
+            like(item.name,  `%${q}%`),
+            like(item.notes, `%${q}%`),
+            sql`CAST(${item.spec} AS TEXT) LIKE ${'%' + q + '%'}`,
             sql`CAST(${item.itemNumber} AS TEXT) LIKE ${'%' + q + '%'}`,
             ...(/^\d+$/.test(q) ? [eq(item.itemNumber, parseInt(q, 10))] : []),
           )
@@ -102,37 +85,27 @@ export default function SearchScreen() {
           contentContainerStyle={styles.list}
           keyboardShouldPersistTaps="handled"
           automaticallyAdjustKeyboardInsets
-          renderItem={({ item: r }) => {
-            const statusColour = STATUS_COLOURS[r.status ?? 'active'] ?? '#8e8e93';
-            const subtitle = [r.manufacturer, r.model].filter(Boolean).join(' ');
-            return (
-              <Pressable
-                style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-                onPress={() => { Keyboard.dismiss(); router.push({ pathname: '/item-detail', params: { itemId: r.id } }); }}
-              >
-                {r.itemNumber != null && (
-                  <View style={styles.numberBadge}>
-                    <Text style={styles.numberText}>#{String(r.itemNumber).padStart(3, '0')}</Text>
-                  </View>
-                )}
-                <View style={[styles.rowBody, r.itemNumber == null && styles.rowBodyNobadge]}>
-                  <Text style={styles.rowName}>{r.name}</Text>
-                  {subtitle ? <Text style={styles.rowSubtitle}>{subtitle}</Text> : null}
-                  {r.catalogueName ? (
-                    <View style={styles.rowCatalogueRow}>
-                      <CatalogueIcon value={r.catalogueIcon} size={12} />
-                      <Text style={styles.rowCatalogue}>{r.catalogueName}</Text>
-                    </View>
-                  ) : null}
+          renderItem={({ item: r }) => (
+            <Pressable
+              style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+              onPress={() => { Keyboard.dismiss(); router.push({ pathname: '/item-detail', params: { itemId: r.id } }); }}
+            >
+              {r.itemNumber != null && (
+                <View style={styles.numberBadge}>
+                  <Text style={styles.numberText}>#{String(r.itemNumber).padStart(3, '0')}</Text>
                 </View>
-                {r.status && r.status !== 'active' && (
-                  <View style={[styles.statusBadge, { backgroundColor: statusColour }]}>
-                    <Text style={styles.statusText}>{r.status}</Text>
+              )}
+              <View style={[styles.rowBody, r.itemNumber == null && styles.rowBodyNobadge]}>
+                <Text style={styles.rowName}>{r.name}</Text>
+                {r.catalogueName ? (
+                  <View style={styles.rowCatalogueRow}>
+                    <CatalogueIcon value={r.catalogueIcon} size={12} />
+                    <Text style={styles.rowCatalogue}>{r.catalogueName}</Text>
                   </View>
-                )}
-              </Pressable>
-            );
-          }}
+                ) : null}
+              </View>
+            </Pressable>
+          )}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
         />
       )}
@@ -186,16 +159,8 @@ const styles = StyleSheet.create({
   rowBody: { flex: 1 },
   rowBodyNobadge: { marginLeft: 4 },
   rowName: { fontSize: 16, fontWeight: '500', color: '#111' },
-  rowSubtitle: { fontSize: 13, color: '#666', marginTop: 2 },
   rowCatalogueRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
   rowCatalogue: { fontSize: 12, color: '#aaa' },
-  statusBadge: {
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    marginLeft: 8,
-  },
-  statusText: { fontSize: 12, fontWeight: '600', color: '#fff' },
   separator: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: '#ddd',

@@ -79,9 +79,9 @@ API_TOKEN=ClarenceRoad
 
 **To rebuild and push the web Docker image:**
 ```bash
-docker buildx build --platform linux/amd64,linux/arm64 -t davideclark/home-inventory-web:latest --push ./web
+docker buildx build --platform linux/amd64 -t davideclark/home-inventory-web:latest --push ./web
 ```
-> Note: arm/v7 is excluded from the web build — Next.js compilation via QEMU emulation takes 60+ minutes. The NAS is amd64; arm64 covers Raspberry Pi 4/5.
+> Note: arm platforms excluded — QEMU emulation too slow. The NAS is amd64.
 
 **DATABASE_URL (local dev)**: `postgresql://inventory:inventory_local@localhost:5432/home_inventory`
 
@@ -228,8 +228,8 @@ Modals use `presentation: 'modal'` in `_layout.tsx`.
 
 Five tables:
 
-- **`catalogue`** — groups items and defines custom spec fields for the group. Has `icon`, `description`, `sort_order`, `fields` (JSON array of `FieldDef` — custom per-catalogue spec field definitions, e.g. `[{ key: "speed_mhz", label: "Speed (MHz)", type: "number" }]`). Types: `text | number | textarea`. No structural flag — whether an item is a container is determined solely by `item.can_contain`.
-- **`item`** — entire physical hierarchy in one self-referencing table. `item_number` is nullable (containers/locations don't need a sticker). `parent_id` is a UUID self-ref. `spec` is a JSON blob for catalogue-specific fields — keys are defined by the parent catalogue's `fields` array; data is preserved when moving an item between catalogues (only displayed fields change). `can_contain` is per-item. CHECK constraint: `can_contain = 1 OR parent_id IS NOT NULL`.
+- **`catalogue`** — groups items and defines custom spec fields for the group. Has `icon`, `description`, `sort_order`, `fields` (JSON array of `FieldDef` — custom per-catalogue spec field definitions, e.g. `[{ key: "speed_mhz", label: "Speed (MHz)", type: "number", showInList: true }]`). Types: `text | number | textarea`. `showInList` controls which spec fields appear as subtitles in item list rows. No structural flag — whether an item is a container is determined solely by `item.can_contain`.
+- **`item`** — entire physical hierarchy in one self-referencing table. `item_number` is nullable (containers/locations don't need a sticker). `parent_id` is a UUID self-ref. `spec` is a JSON blob for all catalogue-specific fields — **this includes manufacturer, model, type, condition, colour, barcode, and status**, which are stored in spec rather than dedicated columns. Keys are defined by the parent catalogue's `fields` array; data is preserved when moving an item between catalogues. `can_contain` is per-item. CHECK constraint: `can_contain = 1 OR parent_id IS NOT NULL`.
 - **`settings`** — key/value store for app-level state. Keys: `device_id`, `last_sync_at`, `api_url`, `api_token`.
 - **`sync_tombstone`** — records deletes so they propagate across devices. `entity_type` is `'catalogue' | 'item'`, `entity_id` is the UUID of the deleted record. Mobile adds `synced` boolean (SQLite); server schema omits it. Always delete via `deleteItem()`/`deleteCatalogue()`/`deleteContainer()` in `sync.ts` — never call `db.delete()` directly, or the tombstone won't be created.
 - **`sync_log`** — polymorphic audit trail. `entity_type` is `'catalogue' | 'item'`, `entity_id` is the UUID of the record. No DB-level FK — app-enforced.

@@ -6,28 +6,18 @@ import IconRenderer from './IconRenderer';
 import { api } from '../lib/api';
 import type { Catalogue, FieldDef, Item } from '../lib/types';
 
-const STATUSES = ['active', 'untested', 'tested', 'faulty', 'stored', 'sold', 'donated', 'lost'] as const;
-
 type Form = {
   name: string;
   itemNumber: string;
-  status: string;
   catalogueId: string;
   parentId: string;
   canContain: boolean;
-  manufacturer: string;
-  model: string;
-  type: string;
-  condition: string;
-  colour: string;
-  barcode: string;
   notes: string;
 };
 
 const blank: Form = {
-  name: '', itemNumber: '', status: 'active', catalogueId: '', parentId: '',
-  canContain: false, manufacturer: '', model: '', type: '',
-  condition: '', colour: '', barcode: '', notes: '',
+  name: '', itemNumber: '', catalogueId: '', parentId: '',
+  canContain: false, notes: '',
 };
 
 function buildPath(id: string, map: Map<string, Item>, depth = 0): string {
@@ -83,19 +73,12 @@ export default function ItemModal({ item, defaultCatalogueId, defaultParentId, d
   useEffect(() => {
     if (item) {
       setForm({
-        name:         item.name,
-        itemNumber:   item.itemNumber != null ? String(item.itemNumber) : '',
-        status:       item.status ?? 'active',
-        catalogueId:  item.catalogueId ?? '',
-        parentId:     item.parentId ?? '',
-        canContain:   item.canContain,
-        manufacturer: item.manufacturer ?? '',
-        model:        item.model ?? '',
-        type:         item.type ?? '',
-        condition:    item.condition ?? '',
-        colour:       item.colour ?? '',
-        barcode:      item.barcode ?? '',
-        notes:        item.notes ?? '',
+        name:        item.name,
+        itemNumber:  item.itemNumber != null ? String(item.itemNumber) : '',
+        catalogueId: item.catalogueId ?? '',
+        parentId:    item.parentId ?? '',
+        canContain:  item.canContain,
+        notes:       item.notes ?? '',
       });
       const initial: Record<string, string> = {};
       if (item.spec) {
@@ -143,22 +126,15 @@ export default function ItemModal({ item, defaultCatalogueId, defaultParentId, d
       }
 
       const data = {
-        name:         form.name.trim(),
+        name:        form.name.trim(),
         itemNumber,
-        status:       form.status,
-        catalogueId:  form.catalogueId || null,
-        parentId:     form.parentId    || null,
-        canContain:   form.canContain,
-        manufacturer: form.manufacturer.trim() || null,
-        model:        form.model.trim()        || null,
-        type:         form.type.trim()         || null,
-        condition:    form.condition.trim()     || null,
-        colour:       form.colour.trim()        || null,
-        barcode:      form.barcode.trim()       || null,
-        notes:        form.notes.trim()         || null,
-        spec:         Object.keys(specToSave).length > 0 ? specToSave : null,
-        deviceId:     'web',
-        synced:       false,
+        catalogueId: form.catalogueId || null,
+        parentId:    form.parentId    || null,
+        canContain:  form.canContain,
+        notes:       form.notes.trim() || null,
+        spec:        Object.keys(specToSave).length > 0 ? specToSave : null,
+        deviceId:    'web',
+        synced:      false,
         lastModified: new Date().toISOString(),
       };
       if (isEdit && item) {
@@ -203,22 +179,6 @@ export default function ItemModal({ item, defaultCatalogueId, defaultParentId, d
             <input value={form.name} onChange={e => set('name', e.target.value)}
               onKeyDown={e => e.key === 'Enter' && save()}
               className="input" placeholder="e.g. Kensington USB Hub" autoFocus={isEdit} />
-          </div>
-        </div>
-
-        {/* Status chips */}
-        <div>
-          <label className="block text-xs font-medium text-gray-500 mb-2">Status</label>
-          <div className="flex flex-wrap gap-2">
-            {STATUSES.map(s => (
-              <button key={s} type="button" onClick={() => set('status', s)}
-                className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
-                  form.status === s
-                    ? 'bg-blue-500 border-blue-500 text-white'
-                    : 'border-gray-300 text-gray-600 hover:bg-gray-50'
-                }`}
-              >{s}</button>
-            ))}
           </div>
         </div>
 
@@ -291,26 +251,6 @@ export default function ItemModal({ item, defaultCatalogueId, defaultParentId, d
             className="w-4 h-4 rounded accent-blue-500" />
           <span className="text-sm text-gray-700">Can contain other items</span>
         </label>
-
-        {/* Manufacturer / Model / Type */}
-        <div className="grid grid-cols-3 gap-3">
-          {(['manufacturer', 'model', 'type'] as const).map(k => (
-            <div key={k}>
-              <label className="block text-xs font-medium text-gray-500 mb-1 capitalize">{k}</label>
-              <input value={form[k]} onChange={e => set(k, e.target.value)} className="input" />
-            </div>
-          ))}
-        </div>
-
-        {/* Condition / Colour / Barcode */}
-        <div className="grid grid-cols-3 gap-3">
-          {(['condition', 'colour', 'barcode'] as const).map(k => (
-            <div key={k}>
-              <label className="block text-xs font-medium text-gray-500 mb-1 capitalize">{k}</label>
-              <input value={form[k]} onChange={e => set(k, e.target.value)} className="input" />
-            </div>
-          ))}
-        </div>
 
         {/* Notes */}
         <div>

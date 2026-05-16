@@ -10,16 +10,7 @@ import { item, catalogue } from '../../schema';
 import { deleteItem, deleteContainer } from '../../sync';
 import CatalogueIcon from '../../components/CatalogueIcon';
 
-const STATUS_COLOURS: Record<string, string> = {
-  active:   '#34c759',
-  untested: '#ff9500',
-  tested:   '#34c759',
-  faulty:   '#ff3b30',
-  stored:   '#8e8e93',
-  sold:     '#5856d6',
-  donated:  '#007AFF',
-  lost:     '#ff9500',
-};
+type FieldDef = { key: string; label: string; type: string; showInList?: boolean };
 
 function naturalSort(a: string, b: string): number {
   const re = /(\d+)/g;
@@ -101,13 +92,12 @@ export default function ContainerScreen() {
         itemNumber: item.itemNumber,
         name: item.name,
         notes: item.notes,
-        status: item.status,
-        manufacturer: item.manufacturer,
-        model: item.model,
+        spec: item.spec,
         canContain: item.canContain,
         parentId: item.parentId,
         catalogueName: catalogue.name,
         catalogueIcon: catalogue.icon,
+        catalogueFields: catalogue.fields,
       })
       .from(item)
       .leftJoin(catalogue, eq(item.catalogueId, catalogue.id))
@@ -193,13 +183,12 @@ type Child = {
   itemNumber: number | null;
   name: string;
   notes: string | null;
-  status: string | null;
-  manufacturer: string | null;
-  model: string | null;
+  spec: string | null;
   canContain: boolean;
   parentId: string | null;
   catalogueName: string | null;
   catalogueIcon: string | null;
+  catalogueFields: string | null;
 };
 
 function ContainerRow({ child: c, containerMap, cataloguesByContainer }: { child: Child; containerMap: ContainerMap; cataloguesByContainer: Map<string, string[]> }) {
@@ -281,8 +270,12 @@ function ContainerRow({ child: c, containerMap, cataloguesByContainer }: { child
 
 function ItemRow({ child: i, containerMap }: { child: Child; containerMap: ContainerMap }) {
   const swipeRef = useRef<Swipeable>(null);
-  const statusColour = STATUS_COLOURS[i.status ?? 'active'] ?? '#8e8e93';
-  const subtitle = [i.manufacturer, i.model].filter(Boolean).join(' ');
+  const spec = i.spec ? JSON.parse(i.spec) : {};
+  const showInListFields: FieldDef[] = (() => {
+    try { return (JSON.parse(i.catalogueFields ?? '[]') as FieldDef[]).filter(f => f.showInList); }
+    catch { return []; }
+  })();
+  const subtitle = showInListFields.map(f => spec[f.key]).filter(Boolean).join(' · ');
 
   function renderRightActions() {
     return (
@@ -333,11 +326,6 @@ function ItemRow({ child: i, containerMap }: { child: Child; containerMap: Conta
             </View>
           ) : null}
         </View>
-        {i.status && i.status !== 'active' && (
-          <View style={[styles.statusBadge, { backgroundColor: statusColour }]}>
-            <Text style={styles.statusText}>{i.status}</Text>
-          </View>
-        )}
       </Pressable>
     </Swipeable>
   );
@@ -378,8 +366,6 @@ const styles = StyleSheet.create({
   rowSubtitle: { fontSize: 13, color: '#666', marginTop: 2 },
   rowCatalogueRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
   rowCatalogue: { fontSize: 11, color: '#aaa' },
-  statusBadge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, marginLeft: 8 },
-  statusText: { fontSize: 12, fontWeight: '600', color: '#fff' },
   chevron: { fontSize: 20, color: '#ccc' },
   separator: { height: StyleSheet.hairlineWidth, backgroundColor: '#ddd', marginLeft: 76 },
   swipeActions: { flexDirection: 'row' },

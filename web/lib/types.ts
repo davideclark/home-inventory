@@ -2,6 +2,7 @@ export type FieldDef = {
   key: string;
   label: string;
   type: 'text' | 'number' | 'textarea';
+  showInList?: boolean;
 };
 
 export type Catalogue = {
@@ -23,14 +24,7 @@ export type Item = {
   catalogueId: string | null;
   parentId: string | null;
   name: string;
-  status: string | null;
   notes: string | null;
-  manufacturer: string | null;
-  model: string | null;
-  type: string | null;
-  condition: string | null;
-  colour: string | null;
-  barcode: string | null;
   canContain: boolean;
   spec: Record<string, unknown> | null;
   createdAt: string;

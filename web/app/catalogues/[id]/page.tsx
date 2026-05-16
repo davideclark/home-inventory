@@ -7,7 +7,7 @@ import ItemModal from '../../../components/ItemModal';
 import ConfirmDialog from '../../../components/ConfirmDialog';
 import IconRenderer from '../../../components/IconRenderer';
 import { api } from '../../../lib/api';
-import type { Catalogue, Item } from '../../../lib/types';
+import type { Catalogue, FieldDef, Item } from '../../../lib/types';
 
 export default function CatalogueItemsPage() {
   const { id } = useParams<{ id: string }>();
@@ -41,6 +41,8 @@ export default function CatalogueItemsPage() {
     setEditItem(null);
   }
 
+  const showInListFields: FieldDef[] = (catalogue?.fields ?? []).filter(f => f.showInList);
+
   function itemNum(it: Item) {
     return it.itemNumber != null ? `#${String(it.itemNumber).padStart(3, '0')}` : '';
   }
@@ -69,9 +71,10 @@ export default function CatalogueItemsPage() {
               <tr className="border-b border-gray-100 text-left text-xs text-gray-400 font-medium">
                 <th className="px-4 py-3 w-16">#</th>
                 <th className="px-4 py-3">Name</th>
-                <th className="px-4 py-3">Manufacturer</th>
-                <th className="px-4 py-3">Model</th>
-                <th className="px-4 py-3 w-24">Status</th>
+                {showInListFields.map(f => (
+                  <th key={f.key} className="px-4 py-3">{f.label}</th>
+                ))}
+                <th className="px-4 py-3">Notes</th>
                 <th className="px-4 py-3 w-24"></th>
               </tr>
             </thead>
@@ -80,13 +83,10 @@ export default function CatalogueItemsPage() {
                 <tr key={it.id} className="hover:bg-gray-50 group">
                   <td className="px-4 py-3 text-gray-400 font-mono text-xs tabular-nums">{itemNum(it)}</td>
                   <td className="px-4 py-3 font-medium">{it.name}</td>
-                  <td className="px-4 py-3 text-gray-500">{it.manufacturer ?? ''}</td>
-                  <td className="px-4 py-3 text-gray-500">{it.model ?? ''}</td>
-                  <td className="px-4 py-3">
-                    {it.status && (
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{it.status}</span>
-                    )}
-                  </td>
+                  {showInListFields.map(f => (
+                    <td key={f.key} className="px-4 py-3 text-gray-500 text-xs">{it.spec?.[f.key] != null ? String(it.spec[f.key]) : ''}</td>
+                  ))}
+                  <td className="px-4 py-3 text-gray-500 text-xs truncate max-w-xs">{it.notes ?? ''}</td>
                   <td className="px-4 py-3">
                     <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity justify-end">
                       <button onClick={() => setEditItem(it)} className="btn-sm">Edit</button>

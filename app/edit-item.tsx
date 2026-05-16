@@ -1,6 +1,6 @@
 import {
-  View, StyleSheet, Pressable, Switch,
-  ScrollView, Alert, Modal, FlatList,
+  View, StyleSheet, Pressable, Switch, ScrollView,
+  Alert, Modal, FlatList,
 } from 'react-native';
 import { Text, TextInput } from '../components/Text';
 import { useState, useEffect, useMemo } from 'react';
@@ -32,9 +32,6 @@ function naturalSort(a: string, b: string): number {
   return 0;
 }
 
-const STATUSES = ['active', 'untested', 'tested', 'faulty', 'stored', 'sold', 'donated', 'lost'] as const;
-type Status = (typeof STATUSES)[number];
-
 export default function EditItemScreen() {
   const { itemId } = useLocalSearchParams<{ itemId: string }>();
 
@@ -62,13 +59,6 @@ export default function EditItemScreen() {
 
   const [itemNumber, setItemNumber] = useState('');
   const [name, setName] = useState('');
-  const [status, setStatus] = useState<Status>('active');
-  const [manufacturer, setManufacturer] = useState('');
-  const [model, setModel] = useState('');
-  const [type, setType] = useState('');
-  const [condition, setCondition] = useState('');
-  const [colour, setColour] = useState('');
-  const [barcode, setBarcode] = useState('');
   const [notes, setNotes] = useState('');
   const [canContain, setCanContain] = useState(false);
   const [parentId, setParentId] = useState<string | null>(null);
@@ -86,13 +76,6 @@ export default function EditItemScreen() {
     if (!existing || !containers || !catalogues || loaded) return;
     setItemNumber(existing.itemNumber != null ? String(existing.itemNumber) : '');
     setName(existing.name);
-    setStatus((existing.status as Status) ?? 'active');
-    setManufacturer(existing.manufacturer ?? '');
-    setModel(existing.model ?? '');
-    setType(existing.type ?? '');
-    setCondition(existing.condition ?? '');
-    setColour(existing.colour ?? '');
-    setBarcode(existing.barcode ?? '');
     setNotes(existing.notes ?? '');
     setCanContain(existing.canContain);
     setParentId(existing.parentId ?? null);
@@ -184,13 +167,6 @@ export default function EditItemScreen() {
           itemNumber: num,
           catalogueId,
           name: name.trim(),
-          status,
-          manufacturer: manufacturer.trim() || null,
-          model: model.trim() || null,
-          type: type.trim() || null,
-          condition: condition.trim() || null,
-          colour: colour.trim() || null,
-          barcode: barcode.trim() || null,
           notes: notes.trim() || null,
           canContain,
           parentId,
@@ -289,41 +265,9 @@ export default function EditItemScreen() {
           </View>
         </View>
 
-        {/* Status */}
+        {/* Notes */}
         <View style={styles.section}>
-          <Text style={styles.label}>Status</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
-            {STATUSES.map((s) => (
-              <Pressable
-                key={s}
-                style={[styles.chip, status === s && styles.chipActive]}
-                onPress={() => setStatus(s)}
-              >
-                <Text style={[styles.chipText, status === s && styles.chipTextActive]}>{s}</Text>
-              </Pressable>
-            ))}
-          </ScrollView>
-        </View>
-
-        {/* Classification */}
-        <View style={styles.section}>
-          <Text style={styles.label}>Manufacturer</Text>
-          <TextInput style={styles.input} value={manufacturer} onChangeText={setManufacturer} placeholder="e.g. Kensington" returnKeyType="next" />
-          <Text style={[styles.label, styles.mt]}>Model</Text>
-          <TextInput style={styles.input} value={model} onChangeText={setModel} placeholder="e.g. K33970EU" returnKeyType="next" />
-          <Text style={[styles.label, styles.mt]}>Type</Text>
-          <TextInput style={styles.input} value={type} onChangeText={setType} placeholder="e.g. USB Hub" returnKeyType="next" />
-        </View>
-
-        {/* Details */}
-        <View style={styles.section}>
-          <Text style={styles.label}>Condition</Text>
-          <TextInput style={styles.input} value={condition} onChangeText={setCondition} placeholder="Good / Fair / Poor" returnKeyType="next" />
-          <Text style={[styles.label, styles.mt]}>Colour</Text>
-          <TextInput style={styles.input} value={colour} onChangeText={setColour} placeholder="e.g. Black" returnKeyType="next" />
-          <Text style={[styles.label, styles.mt]}>Barcode</Text>
-          <TextInput style={styles.input} value={barcode} onChangeText={setBarcode} placeholder="Optional" returnKeyType="next" />
-          <Text style={[styles.label, styles.mt]}>Notes</Text>
+          <Text style={styles.label}>Notes</Text>
           <TextInput
             style={[styles.input, styles.multiline]}
             value={notes}
@@ -509,17 +453,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#fafafa',
   },
   multiline: { minHeight: 80, paddingTop: 8 },
-  chips: { gap: 8, paddingTop: 4 },
-  chip: {
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  chipActive: { backgroundColor: '#007AFF', borderColor: '#007AFF' },
-  chipText: { fontSize: 13, color: '#555' },
-  chipTextActive: { color: '#fff', fontWeight: '600' },
   switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   switchLabel: { fontSize: 16, color: '#111' },
   pickerField: {

@@ -70,9 +70,6 @@ export default function SearchPage() {
                 <th className="px-4 py-3 w-16">#</th>
                 <th className="px-4 py-3">Name</th>
                 <th className="px-4 py-3">Catalogue</th>
-                <th className="px-4 py-3">Manufacturer</th>
-                <th className="px-4 py-3">Model</th>
-                <th className="px-4 py-3 w-24">Status</th>
                 <th className="px-4 py-3 w-24"></th>
               </tr>
             </thead>
@@ -85,13 +82,6 @@ export default function SearchPage() {
                     <td className="px-4 py-3 font-medium">{it.name}</td>
                     <td className="px-4 py-3 text-gray-500 text-xs">
                       {cat ? <span className="flex items-center gap-1"><IconRenderer value={cat.icon} size={14} />{cat.name}</span> : ''}
-                    </td>
-                    <td className="px-4 py-3 text-gray-500">{it.manufacturer ?? ''}</td>
-                    <td className="px-4 py-3 text-gray-500">{it.model ?? ''}</td>
-                    <td className="px-4 py-3">
-                      {it.status && (
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{it.status}</span>
-                      )}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity justify-end">

@@ -8,16 +8,7 @@ import { db } from '../db';
 import { item, catalogue } from '../schema';
 import CatalogueIcon from '../components/CatalogueIcon';
 
-const STATUS_COLOURS: Record<string, string> = {
-  active:   '#34c759',
-  untested: '#ff9500',
-  tested:   '#34c759',
-  faulty:   '#ff3b30',
-  stored:   '#8e8e93',
-  sold:     '#5856d6',
-  donated:  '#007AFF',
-  lost:     '#ff9500',
-};
+type FieldDef = { key: string; label: string; type: string; showInList?: boolean };
 
 export default function ItemDetailScreen() {
   const { itemId } = useLocalSearchParams<{ itemId: string }>();
@@ -28,7 +19,7 @@ export default function ItemDetailScreen() {
   const i = itemData?.[0];
 
   const { data: catalogueData } = useLiveQuery(
-    db.select({ name: catalogue.name, icon: catalogue.icon })
+    db.select({ name: catalogue.name, icon: catalogue.icon, fields: catalogue.fields })
       .from(catalogue)
       .where(eq(catalogue.id, i?.catalogueId ?? ''))
       .limit(1)
@@ -47,6 +38,15 @@ export default function ItemDetailScreen() {
     return map;
   }, [containerItems]);
 
+  const specFields = useMemo(() => {
+    try { return JSON.parse(cat?.fields ?? '[]') as FieldDef[]; }
+    catch { return []; }
+  }, [cat?.fields]);
+  const specValues: Record<string, unknown> = useMemo(() => {
+    try { return i?.spec ? JSON.parse(i.spec) : {}; }
+    catch { return {}; }
+  }, [i?.spec]);
+
   if (!i) {
     return (
       <View style={styles.centered}>
@@ -54,8 +54,6 @@ export default function ItemDetailScreen() {
       </View>
     );
   }
-
-  const statusColour = STATUS_COLOURS[i.status ?? 'active'] ?? '#8e8e93';
 
   function buildPath(parentId: string | null | undefined): string {
     if (!parentId) return '';
@@ -90,23 +88,16 @@ export default function ItemDetailScreen() {
       />
       <ScrollView style={styles.flex} contentContainerStyle={styles.content}>
 
-        {/* Name + status */}
+        {/* Name */}
         <View style={styles.section}>
-          <View style={styles.nameRow}>
-            <Text style={styles.itemName}>{i.name}</Text>
-            {i.status && (
-              <View style={[styles.statusBadge, { backgroundColor: statusColour }]}>
-                <Text style={styles.statusText}>{i.status}</Text>
-              </View>
-            )}
-          </View>
+          <Text style={styles.itemName}>{i.name}</Text>
           {i.itemNumber != null && (
             <Text style={styles.itemNumber}>Item #{String(i.itemNumber).padStart(3, '0')}</Text>
           )}
         </View>
 
-        {/* Classification */}
-        {(cat || i.manufacturer || i.model || i.type) && (
+        {/* Catalogue + spec fields */}
+        {(cat || specFields.length > 0) && (
           <View style={styles.section}>
             {cat && (
               <View style={styles.row}>
@@ -117,18 +108,12 @@ export default function ItemDetailScreen() {
                 </View>
               </View>
             )}
-            {i.manufacturer && <Row label="Manufacturer" value={i.manufacturer} />}
-            {i.model && <Row label="Model" value={i.model} />}
-            {i.type && <Row label="Type" value={i.type} />}
-          </View>
-        )}
-
-        {/* Details */}
-        {(i.condition || i.colour || i.barcode) && (
-          <View style={styles.section}>
-            {i.condition && <Row label="Condition" value={i.condition} />}
-            {i.colour && <Row label="Colour" value={i.colour} />}
-            {i.barcode && <Row label="Barcode" value={i.barcode} />}
+            {specFields.map(field => {
+              const val = specValues[field.key];
+              return val != null && val !== '' ? (
+                <Row key={field.key} label={field.label} value={String(val)} />
+              ) : null;
+            })}
           </View>
         )}
 
@@ -175,11 +160,8 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 10,
   },
-  nameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
-  itemName: { flex: 1, fontSize: 20, fontWeight: '600', color: '#111' },
+  itemName: { fontSize: 20, fontWeight: '600', color: '#111' },
   itemNumber: { fontSize: 13, color: '#888', marginTop: 4 },
-  statusBadge: { borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4 },
-  statusText: { fontSize: 13, fontWeight: '600', color: '#fff' },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   label: { fontSize: 13, color: '#888', flex: 1 },
   value: { fontSize: 15, color: '#111', flex: 2, textAlign: 'right' },

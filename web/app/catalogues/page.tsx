@@ -61,6 +61,9 @@ export default function CataloguesPage() {
         await api.catalogues.create({ ...data, deviceId: 'web', synced: false });
       }
       qc.invalidateQueries({ queryKey: ['catalogues'] });
+      if (modal?.mode === 'edit' && modal.item) {
+        qc.invalidateQueries({ queryKey: ['catalogue', modal.item.id] });
+      }
       setModal(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Save failed');
@@ -89,12 +92,12 @@ export default function CataloguesPage() {
   function removeField(i: number) {
     setForm(p => ({ ...p, fields: p.fields.filter((_, j) => j !== i) }));
   }
-  function updateField(i: number, k: keyof FieldDef, value: string) {
+  function updateField(i: number, k: keyof FieldDef, value: string | boolean) {
     setForm(p => {
       const fields = [...p.fields];
       const old = fields[i];
       const updated = { ...old, [k]: value } as FieldDef;
-      if (k === 'label' && old.key === toKey(old.label)) updated.key = toKey(value);
+      if (k === 'label' && typeof value === 'string' && old.key === toKey(old.label)) updated.key = toKey(value);
       fields[i] = updated;
       return { ...p, fields };
     });
@@ -182,34 +185,41 @@ export default function CataloguesPage() {
               ) : (
                 <div className="space-y-2">
                   {form.fields.map((field, i) => (
-                    <div key={i} className="flex gap-2 items-start bg-gray-50 rounded-lg p-2">
-                      <div className="flex-1 min-w-0">
+                    <div key={i} className="bg-gray-50 rounded-lg p-2 space-y-1">
+                      <div className="flex gap-2 items-center">
                         <input
                           value={field.label}
                           onChange={e => updateField(i, 'label', e.target.value)}
-                          className="input text-sm w-full"
+                          className="input text-sm flex-1 min-w-0"
                           placeholder="Label (e.g. Speed MHz)"
                         />
-                        <div className="flex items-center gap-1 mt-1">
+                        <select
+                          value={field.type}
+                          onChange={e => updateField(i, 'type', e.target.value)}
+                          className="select text-sm w-28 shrink-0"
+                        >
+                          <option value="text">Text</option>
+                          <option value="number">Number</option>
+                          <option value="textarea">Multiline</option>
+                        </select>
+                        <button type="button" onClick={() => removeField(i)} className="text-gray-400 hover:text-red-500 shrink-0">✕</button>
+                      </div>
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-1">
                           <span className="text-xs text-gray-400">key:</span>
                           <input
                             value={field.key}
                             onChange={e => updateField(i, 'key', e.target.value)}
-                            className="text-xs text-gray-500 bg-transparent border-0 border-b border-dashed border-gray-300 focus:outline-none focus:border-gray-400 min-w-0 w-full"
+                            className="text-xs text-gray-500 bg-transparent border-0 border-b border-dashed border-gray-300 focus:outline-none focus:border-gray-400 w-40"
                             placeholder="auto"
                           />
                         </div>
+                        <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer">
+                          <input type="checkbox" checked={!!field.showInList}
+                            onChange={e => updateField(i, 'showInList', e.target.checked)} />
+                          Show in list
+                        </label>
                       </div>
-                      <select
-                        value={field.type}
-                        onChange={e => updateField(i, 'type', e.target.value)}
-                        className="select text-sm w-28 shrink-0"
-                      >
-                        <option value="text">Text</option>
-                        <option value="number">Number</option>
-                        <option value="textarea">Multiline</option>
-                      </select>
-                      <button type="button" onClick={() => removeField(i)} className="text-gray-400 hover:text-red-500 mt-1.5 shrink-0">✕</button>
                     </div>
                   ))}
                 </div>

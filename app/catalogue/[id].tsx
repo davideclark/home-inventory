@@ -12,7 +12,7 @@ import { db } from '../../db';
 import { catalogue, item } from '../../schema';
 import { deleteCatalogue } from '../../sync';
 
-type FieldDef = { key: string; label: string; type: 'text' | 'number' | 'textarea' };
+type FieldDef = { key: string; label: string; type: 'text' | 'number' | 'textarea'; showInList?: boolean };
 
 function toKey(label: string): string {
   return label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 50);
@@ -40,12 +40,12 @@ export default function EditCatalogueScreen() {
   function removeField(i: number) {
     setFields(prev => prev.filter((_, j) => j !== i));
   }
-  function updateField(i: number, k: keyof FieldDef, value: string) {
+  function updateField(i: number, k: keyof FieldDef, value: string | boolean) {
     setFields(prev => {
       const next = [...prev];
       const old = next[i];
       const updated = { ...old, [k]: value } as FieldDef;
-      if (k === 'label' && old.key === toKey(old.label)) updated.key = toKey(value);
+      if (k === 'label' && typeof value === 'string' && old.key === toKey(old.label)) updated.key = toKey(value);
       next[i] = updated;
       return next;
     });
@@ -249,6 +249,11 @@ export default function EditCatalogueScreen() {
                   </Pressable>
                 ))}
               </View>
+              <Pressable onPress={() => updateField(i, 'showInList', !field.showInList)} style={styles.showInListToggle}>
+                <Text style={field.showInList ? styles.toggleOn : styles.toggleOff}>
+                  {field.showInList ? '✓ Show in list' : '○ Show in list'}
+                </Text>
+              </Pressable>
             </View>
           ))}
         </View>
@@ -383,4 +388,7 @@ const styles = StyleSheet.create({
   typeChipActive: { backgroundColor: '#007AFF', borderColor: '#007AFF' },
   typeChipText: { fontSize: 12, color: '#555' },
   typeChipTextActive: { color: '#fff', fontWeight: '600' },
+  showInListToggle: { marginTop: 6 },
+  toggleOn: { fontSize: 12, color: '#007AFF', fontWeight: '600' },
+  toggleOff: { fontSize: 12, color: '#aaa' },
 });

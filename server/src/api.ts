@@ -116,8 +116,6 @@ app.get('/api/search', async (c) => {
     or(
       ilike(item.name, pattern),
       ilike(item.notes, pattern),
-      ilike(item.manufacturer, pattern),
-      ilike(item.model, pattern),
       sql`CAST(${item.itemNumber} AS TEXT) ILIKE ${pattern}`,
       sql`CAST(${item.spec} AS TEXT) ILIKE ${pattern}`,
       ...(numericVal !== null ? [eq(item.itemNumber, numericVal)] : []),
