@@ -209,6 +209,61 @@ export default function EditItemScreen() {
     );
   }
 
+  async function uploadPhoto(uri: string) {
+    setImageUploading(true);
+    try {
+      const { url, token } = await getImageUrl(itemId);
+      setImageUrl(url);
+      setImageToken(token);
+      await uploadItemImage(itemId, uri);
+      setHasImage(true);
+      setImageCacheBuster(v => v + 1);
+    } catch (e) {
+      Alert.alert('Upload failed', e instanceof Error ? e.message : 'Could not upload photo.');
+    } finally {
+      setImageUploading(false);
+    }
+  }
+
+  function pickPhoto() {
+    Alert.alert(
+      'Add Photo',
+      undefined,
+      [
+        {
+          text: 'Take Photo',
+          onPress: async () => {
+            const { status } = await ImagePicker.requestCameraPermissionsAsync();
+            if (status !== 'granted') {
+              Alert.alert('Permission required', 'Camera access is needed to take a photo.');
+              return;
+            }
+            const result = await ImagePicker.launchCameraAsync({
+              mediaTypes: ['images'],
+              quality: 0.8,
+              allowsEditing: true,
+              aspect: [1, 1],
+            });
+            if (!result.canceled && result.assets[0]) await uploadPhoto(result.assets[0].uri);
+          },
+        },
+        {
+          text: 'Choose from Library',
+          onPress: async () => {
+            const result = await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: ['images'],
+              quality: 0.8,
+              allowsEditing: true,
+              aspect: [1, 1],
+            });
+            if (!result.canceled && result.assets[0]) await uploadPhoto(result.assets[0].uri);
+          },
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
+  }
+
   async function handleDelete() {
     try {
       await deleteItem(itemId);
@@ -308,28 +363,7 @@ export default function EditItemScreen() {
               <Pressable
                 style={({ pressed }) => [styles.imageBtn, pressed && styles.imageBtnPressed, imageUploading && styles.imageBtnDisabled]}
                 disabled={imageUploading}
-                onPress={async () => {
-                  const result = await ImagePicker.launchImageLibraryAsync({
-                    mediaTypes: ['images'],
-                    quality: 0.8,
-                    allowsEditing: true,
-                    aspect: [1, 1],
-                  });
-                  if (result.canceled || !result.assets[0]) return;
-                  setImageUploading(true);
-                  try {
-                    const { url, token } = await getImageUrl(itemId);
-                    setImageUrl(url);
-                    setImageToken(token);
-                    await uploadItemImage(itemId, result.assets[0].uri);
-                    setHasImage(true);
-                    setImageCacheBuster(v => v + 1);
-                  } catch (e) {
-                    Alert.alert('Upload failed', e instanceof Error ? e.message : 'Could not upload photo.');
-                  } finally {
-                    setImageUploading(false);
-                  }
-                }}
+                onPress={pickPhoto}
               >
                 <Text style={styles.imageBtnText}>
                   {imageUploading ? 'Uploading…' : hasImage ? 'Change photo' : '📷 Add photo'}
