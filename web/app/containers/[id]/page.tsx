@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
@@ -48,6 +48,13 @@ export default function ContainerPage() {
     queryKey: ['containers'],
     queryFn: () => api.items.list<Item[]>({ canContain: 'true' }),
   });
+
+  const { data: parentIdList = [] } = useQuery({
+    queryKey: ['items', 'parent-ids'],
+    queryFn: () => api.items.parentIds(),
+  });
+
+  const parentIdSet = useMemo(() => new Set(parentIdList), [parentIdList]);
 
   const { data: children = [], isLoading } = useQuery({
     queryKey: ['container-children', id],
@@ -167,20 +174,22 @@ export default function ContainerPage() {
                 {subContainers.map(c => (
                   <div key={c.id} className="flex items-center px-4 py-3 gap-3 hover:bg-gray-50 group">
                     <span className="text-lg">📦</span>
-                    <Link href={`/containers/${c.id}`} className="flex-1 hover:text-blue-500">
-                      <div className="font-medium text-sm">{c.name}</div>
+                    <div className="flex-1 min-w-0">
+                      <button onClick={() => setDetailItem(c)} className="font-medium text-sm hover:text-blue-500 text-left">
+                        {c.name}
+                      </button>
                       {(() => {
                         const cats = cataloguesByContainer.get(c.id);
                         return cats?.length
                           ? <div className="text-xs text-gray-400 mt-0.5">{cats.join(', ')}</div>
                           : c.notes ? <div className="text-xs text-gray-400 mt-0.5">{c.notes}</div> : null;
                       })()}
-                    </Link>
+                    </div>
                     <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {parentIdSet.has(c.id) && <Link href={`/containers/${c.id}`} className="btn-sm">Browse Contents</Link>}
                       <button onClick={() => setEditItem(c)} className="btn-sm">Edit</button>
                       <button onClick={() => handleContainerDeleteClick(c)} className="btn-sm-danger">Delete</button>
                     </div>
-                    <Link href={`/containers/${c.id}`} className="text-gray-300 group-hover:text-gray-400">›</Link>
                   </div>
                 ))}
               </div>

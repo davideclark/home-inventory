@@ -1,9 +1,10 @@
 'use client';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import ItemModal from '../../components/ItemModal';
+import ItemDetailModal from '../../components/ItemDetailModal';
 import { api } from '../../lib/api';
 import type { Item, Catalogue } from '../../lib/types';
 
@@ -13,6 +14,13 @@ export default function ContainersPage() {
     queryKey: ['containers'],
     queryFn: () => api.items.list<Item[]>({ canContain: 'true' }),
   });
+
+  const { data: parentIdList = [] } = useQuery({
+    queryKey: ['items', 'parent-ids'],
+    queryFn: () => api.items.parentIds(),
+  });
+
+  const parentIdSet = useMemo(() => new Set(parentIdList), [parentIdList]);
 
   const { data: allLeafItems = [] } = useQuery({
     queryKey: ['items-by-parent'],
@@ -43,6 +51,7 @@ export default function ContainersPage() {
 
   const [addOpen, setAddOpen] = useState(false);
   const [editItem, setEditItem] = useState<Item | null>(null);
+  const [detailItem, setDetailItem] = useState<Item | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{
     id: string; name: string; childCount: number; hasNonContainerChildren: boolean;
   } | null>(null);
@@ -89,8 +98,10 @@ export default function ContainersPage() {
           {roots.map(c => (
             <div key={c.id} className="flex items-center px-4 py-3 gap-3 hover:bg-gray-50 group">
               <span className="text-xl">📦</span>
-              <Link href={`/containers/${c.id}`} className="flex-1 hover:text-blue-500">
-                <div className="font-medium text-sm">{c.name}</div>
+              <div className="flex-1 min-w-0">
+                <button onClick={() => setDetailItem(c)} className="font-medium text-sm hover:text-blue-500 text-left">
+                  {c.name}
+                </button>
                 {subContainerCount(c.id) > 0 && (
                   <div className="text-xs text-gray-400">{subContainerCount(c.id)} sub-containers</div>
                 )}
@@ -100,12 +111,12 @@ export default function ContainersPage() {
                     ? <div className="text-xs text-gray-400 mt-0.5">{cats.join(', ')}</div>
                     : c.notes ? <div className="text-xs text-gray-400 mt-0.5">{c.notes}</div> : null;
                 })()}
-              </Link>
+              </div>
               <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                {parentIdSet.has(c.id) && <Link href={`/containers/${c.id}`} className="btn-sm">Browse Contents</Link>}
                 <button onClick={() => setEditItem(c)} className="btn-sm">Edit</button>
                 <button onClick={() => handleDeleteClick(c)} className="btn-sm-danger">Delete</button>
               </div>
-              <Link href={`/containers/${c.id}`} className="text-gray-300 group-hover:text-gray-400">›</Link>
             </div>
           ))}
         </div>
@@ -113,6 +124,13 @@ export default function ContainersPage() {
 
       {addOpen && (
         <ItemModal defaultCanContain onSave={afterSave} onClose={() => setAddOpen(false)} />
+      )}
+      {detailItem && !editItem && (
+        <ItemDetailModal
+          item={detailItem}
+          onClose={() => setDetailItem(null)}
+          onEdit={() => { setEditItem(detailItem); setDetailItem(null); }}
+        />
       )}
       {editItem && (
         <ItemModal item={editItem} onSave={afterSave} onClose={() => setEditItem(null)} />

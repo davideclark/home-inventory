@@ -3,7 +3,7 @@ import { Text } from '../../components/Text';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
 import { useRef, useMemo } from 'react';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
-import { asc, eq } from 'drizzle-orm';
+import { asc, eq, isNotNull } from 'drizzle-orm';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { db } from '../../db';
 import { catalogue, item } from '../../schema';
@@ -34,11 +34,22 @@ export default function ItemListScreen() {
       .where(eq(item.canContain, true))
   );
 
+  const { data: parentIdRows } = useLiveQuery(
+    db.selectDistinct({ parentId: item.parentId })
+      .from(item)
+      .where(isNotNull(item.parentId))
+  );
+
   const containerMap = useMemo(() => {
     const map = new Map<string, { name: string; itemNumber: number | null; parentId: string | null }>();
     containerItems?.forEach(c => map.set(c.id, { name: c.name, itemNumber: c.itemNumber, parentId: c.parentId }));
     return map;
   }, [containerItems]);
+
+  const parentIdSet = useMemo(
+    () => new Set(parentIdRows?.map(r => r.parentId).filter((id): id is string => id !== null)),
+    [parentIdRows]
+  );
 
   const cat = catData?.[0];
   const title = cat?.name ?? 'Items';
@@ -77,7 +88,7 @@ export default function ItemListScreen() {
           data={items}
           keyExtractor={(i) => i.id}
           contentContainerStyle={styles.list}
-          renderItem={({ item: i }) => <ItemRow item={i} containerMap={containerMap} showInListFields={showInListFields} />}
+          renderItem={({ item: i }) => <ItemRow item={i} containerMap={containerMap} showInListFields={showInListFields} hasChildren={i.canContain === true && parentIdSet.has(i.id)} />}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
         />
       )}
@@ -100,7 +111,7 @@ function buildPath(parentId: string | null | undefined, map: ContainerMap): stri
   return parts.join(' › ');
 }
 
-function ItemRow({ item: i, containerMap, showInListFields }: { item: Item; containerMap: ContainerMap; showInListFields: FieldDef[] }) {
+function ItemRow({ item: i, containerMap, showInListFields, hasChildren }: { item: Item; containerMap: ContainerMap; showInListFields: FieldDef[]; hasChildren: boolean }) {
   const swipeRef = useRef<Swipeable>(null);
   const spec = i.spec ? JSON.parse(i.spec) : {};
   const subtitle = showInListFields.map(f => spec[f.key]).filter(Boolean).join(' · ');
@@ -165,6 +176,15 @@ function ItemRow({ item: i, containerMap, showInListFields }: { item: Item; cont
           {subtitle ? <Text style={styles.rowSubtitle}>{subtitle}</Text> : null}
           {containerPath ? <Text style={styles.rowPath}>{containerPath}</Text> : null}
         </View>
+        {hasChildren && (
+          <Pressable
+            style={styles.browseButton}
+            onPress={() => router.push({ pathname: '/container/[itemId]', params: { itemId: i.id } })}
+            hitSlop={8}
+          >
+            <Text style={styles.browseButtonText}>Browse ›</Text>
+          </Pressable>
+        )}
       </Pressable>
     </Swipeable>
   );
@@ -222,4 +242,14 @@ const styles = StyleSheet.create({
     width: 80,
   },
   actionText: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  browseButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginLeft: 8,
+  },
+  browseButtonText: {
+    fontSize: 13,
+    color: '#007AFF',
+    fontWeight: '600',
+  },
 });

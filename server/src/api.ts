@@ -1,6 +1,6 @@
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
-import { eq, gte, or, ilike, sql } from 'drizzle-orm';
+import { eq, gte, or, ilike, sql, isNotNull } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import { randomUUID } from 'crypto';
 import { readFileSync, writeFileSync, mkdirSync, existsSync, unlinkSync, readdirSync } from 'node:fs';
@@ -109,6 +109,13 @@ app.get('/api/items', async (c) => {
   if (canContain !== undefined) query = query.where(eq(item.canContain, canContain === 'true'));
   const rows = await query.orderBy(item.name);
   return c.json(rows);
+});
+
+app.get('/api/items/parent-ids', async (c) => {
+  const rows = await db.selectDistinct({ parentId: item.parentId })
+    .from(item)
+    .where(isNotNull(item.parentId));
+  return c.json(rows.map(r => r.parentId));
 });
 
 app.get('/api/search', async (c) => {

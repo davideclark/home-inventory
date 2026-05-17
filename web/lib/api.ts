@@ -36,7 +36,8 @@ export const api = {
         : '';
       return req<T>(`items${qs}`);
     },
-    get:    <T = unknown>(id: string) => req<T>(`items/${id}`),
+    get:        <T = unknown>(id: string) => req<T>(`items/${id}`),
+    parentIds:  ()                        => req<string[]>('items/parent-ids'),
     create: <T = unknown>(data: unknown) => req<T>('items', { method: 'POST', body: JSON.stringify(data) }),
     update: <T = unknown>(id: string, data: unknown) => req<T>(`items/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id: string, options?: { cascade?: boolean; moveUp?: boolean }) => {
