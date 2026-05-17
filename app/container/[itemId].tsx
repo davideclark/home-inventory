@@ -86,6 +86,11 @@ export default function ContainerScreen() {
     return map;
   }, [catSummaryRows]);
 
+  const parentIdSet = useMemo(
+    () => new Set(catSummaryRows?.map(r => r.parentId).filter((id): id is string => id !== null)),
+    [catSummaryRows]
+  );
+
   const { data: children } = useLiveQuery(
     db.select({
         id: item.id,
@@ -167,7 +172,7 @@ export default function ContainerScreen() {
           )}
           renderItem={({ item: child }) => (
             child.canContain
-              ? <ContainerRow child={child} containerMap={containerMap} cataloguesByContainer={cataloguesByContainer} />
+              ? <ContainerRow child={child} containerMap={containerMap} cataloguesByContainer={cataloguesByContainer} hasChildren={parentIdSet.has(child.id)} />
               : <ItemRow child={child} containerMap={containerMap} />
           )}
           SectionSeparatorComponent={() => <View style={styles.sectionSep} />}
@@ -191,7 +196,7 @@ type Child = {
   catalogueFields: string | null;
 };
 
-function ContainerRow({ child: c, containerMap, cataloguesByContainer }: { child: Child; containerMap: ContainerMap; cataloguesByContainer: Map<string, string[]> }) {
+function ContainerRow({ child: c, containerMap, cataloguesByContainer, hasChildren }: { child: Child; containerMap: ContainerMap; cataloguesByContainer: Map<string, string[]>; hasChildren: boolean }) {
   const swipeRef = useRef<Swipeable>(null);
 
   function renderRightActions() {
@@ -246,7 +251,7 @@ function ContainerRow({ child: c, containerMap, cataloguesByContainer }: { child
     <Swipeable ref={swipeRef} renderRightActions={renderRightActions} friction={2}>
       <Pressable
         style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-        onPress={() => router.push({ pathname: '/container/[itemId]', params: { itemId: c.id } })}
+        onPress={() => router.push({ pathname: '/item-detail', params: { itemId: c.id } })}
       >
         {c.itemNumber != null && (
           <View style={styles.numberBadge}>
@@ -262,7 +267,15 @@ function ContainerRow({ child: c, containerMap, cataloguesByContainer }: { child
               : c.notes ? <Text style={styles.rowCatalogue}>{c.notes}</Text> : null;
           })()}
         </View>
-        <Text style={styles.chevron}>›</Text>
+        {hasChildren && (
+          <Pressable
+            style={styles.browseButton}
+            onPress={() => router.push({ pathname: '/container/[itemId]', params: { itemId: c.id } })}
+            hitSlop={8}
+          >
+            <Text style={styles.browseButtonText}>Browse Contents ›</Text>
+          </Pressable>
+        )}
       </Pressable>
     </Swipeable>
   );
@@ -366,7 +379,8 @@ const styles = StyleSheet.create({
   rowSubtitle: { fontSize: 13, color: '#666', marginTop: 2 },
   rowCatalogueRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
   rowCatalogue: { fontSize: 11, color: '#aaa' },
-  chevron: { fontSize: 20, color: '#ccc' },
+  browseButton: { paddingHorizontal: 10, paddingVertical: 6, marginLeft: 8 },
+  browseButtonText: { fontSize: 13, color: '#007AFF', fontWeight: '600' },
   separator: { height: StyleSheet.hairlineWidth, backgroundColor: '#ddd', marginLeft: 76 },
   swipeActions: { flexDirection: 'row' },
   editAction: { backgroundColor: '#007AFF', justifyContent: 'center', alignItems: 'center', width: 80 },

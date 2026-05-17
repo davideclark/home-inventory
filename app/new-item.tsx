@@ -212,6 +212,12 @@ export default function AddItemScreen() {
             />
           </View>
 
+          {/* Photo */}
+          <View style={styles.section}>
+            <Text style={styles.label}>Photo</Text>
+            <Text style={styles.photoHint}>Save this item first to add a photo.</Text>
+          </View>
+
           {/* Custom spec fields */}
           {(() => {
             const cat = catalogues?.find(c => c.id === selectedCatalogueId);
@@ -381,6 +387,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fafafa',
   },
   multiline: { minHeight: 80, paddingTop: 8 },
+  photoHint: { fontSize: 14, color: '#aaa', fontStyle: 'italic' },
   switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   switchLabel: { fontSize: 16, color: '#111' },
   pickerField: {

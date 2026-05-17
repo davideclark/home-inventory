@@ -182,7 +182,7 @@ function ItemRow({ item: i, containerMap, showInListFields, hasChildren }: { ite
             onPress={() => router.push({ pathname: '/container/[itemId]', params: { itemId: i.id } })}
             hitSlop={8}
           >
-            <Text style={styles.browseButtonText}>Browse ›</Text>
+            <Text style={styles.browseButtonText}>Browse Contents ›</Text>
           </Pressable>
         )}
       </Pressable>
