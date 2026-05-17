@@ -272,7 +272,7 @@ All mutable tables carry `device_id`, `last_modified`, and `synced` for offline-
 ### Mobile
 - `.sql` migration files are bundled via `babel-plugin-inline-import`. Metro treats them as source files (`sourceExts`), not assets.
 - Migrations run automatically on app startup via `useMigrations(db, migrations)` in `app/_layout.tsx`. Startup sync fires after migrations complete.
-- UUID primary keys: `schema.ts` uses a `generateId()` helper — Hermes JS engine in Expo Go doesn't always expose `crypto.randomUUID`. `sync.ts` uses the same pattern for device ID generation.
+- UUID primary keys: `schema.ts` uses a `generateId()` helper (exported) — Hermes JS engine in Expo Go doesn't always expose `crypto.randomUUID`. `sync.ts` uses the same pattern for device ID generation. `app/new-item.tsx` calls `generateId()` directly on mount so the item ID is known before the record is saved — this allows photo upload during the add-item flow.
 - `GestureHandlerRootView` must wrap the root Stack in `app/_layout.tsx` — swipe gestures silently fail without it.
 - `device_id` in add/edit forms calls `await getDeviceId()` from `sync.ts` — returns a persistent UUID stored in the `settings` table.
 - `useLiveQuery` is used for all list screens — re-renders automatically on DB changes. Requires `enableChangeListener: true` in `db.ts`.
@@ -298,6 +298,7 @@ All mutable tables carry `device_id`, `last_modified`, and `synced` for offline-
 - `/api/discover` returns `{ name, version, requiresToken }` — used by the app's Settings screen to identify and verify the server.
 - API runs migrations automatically on startup via `drizzle-orm/postgres-js/migrator`.
 - **Image endpoints**: `POST /api/items/:id/image` (upload), `GET /api/items/:id/image` (serve), `DELETE /api/items/:id/image` (remove). Files stored at `<IMAGE_PATH>/<id>.jpg`. `IMAGE_PATH` env var defaults to `./images`; in prod it is `/images` (mapped to Docker volume). All three are token-protected.
+- **Parent IDs endpoint**: `GET /api/items/parent-ids` returns a `string[]` of all distinct `parentId` values. Used by web catalogue and container pages to determine which items have children (and therefore show a Browse Contents button). Must be registered before `GET /api/items/:id` in the route order.
 - **Backup/restore**: `GET /api/backup` returns a ZIP containing `data.json` (all catalogues + items) + `images/<id>.jpg` for each item with a photo. `POST /api/restore` accepts a multipart ZIP upload and does a full wipe-and-replace (sync_log → sync_tombstone → items → catalogues → image files, then reimports). Uses `jszip`. Exposed via web Settings page (Export Backup / Import Backup buttons).
 
 ## MCP Servers
