@@ -1,6 +1,6 @@
 import {
   View, StyleSheet, Pressable,
-  ScrollView, Alert, KeyboardAvoidingView, Platform,
+  ScrollView, Alert,
 } from 'react-native';
 import { Text, TextInput } from '../../components/Text';
 import { useState } from 'react';
@@ -75,11 +75,8 @@ export default function AddCatalogueScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.flex}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <ScrollView style={styles.flex} keyboardShouldPersistTaps="handled">
+    <>
+      <ScrollView style={styles.flex} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
         <View style={styles.section}>
           <View style={styles.iconAndName}>
             <View style={styles.iconField}>
@@ -197,7 +194,7 @@ export default function AddCatalogueScreen() {
         onSelect={setIcon}
         onClose={() => setPickerVisible(false)}
       />
-    </KeyboardAvoidingView>
+    </>
   );
 }
 
