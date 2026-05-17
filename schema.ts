@@ -1,7 +1,7 @@
 import { sqliteTable, integer, text, index, check } from 'drizzle-orm/sqlite-core';
 import { relations, sql } from 'drizzle-orm';
 
-function generateId(): string {
+export function generateId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
   }

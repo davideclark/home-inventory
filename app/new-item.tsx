@@ -3,13 +3,15 @@ import {
   Alert, Modal, FlatList,
 } from 'react-native';
 import { Text, TextInput } from '../components/Text';
+import { Image as ExpoImage } from 'expo-image';
+import * as ImagePicker from 'expo-image-picker';
 import { useState, useEffect, useMemo } from 'react';
 import { useLocalSearchParams, router } from 'expo-router';
 import { eq } from 'drizzle-orm';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { db } from '../db';
-import { item, catalogue } from '../schema';
-import { getDeviceId } from '../sync';
+import { item, catalogue, generateId } from '../schema';
+import { getDeviceId, uploadItemImage, deleteItemImage, getImageUrl } from '../sync';
 import CatalogueIcon from '../components/CatalogueIcon';
 
 type FieldDef = { key: string; label: string; type: 'text' | 'number' | 'textarea' };
@@ -35,6 +37,7 @@ function naturalSort(a: string, b: string): number {
 export default function AddItemScreen() {
   const { catalogueId, parentId: initialParentId } = useLocalSearchParams<{ catalogueId?: string; parentId?: string }>();
 
+  const [newItemId] = useState(() => generateId());
   const [itemNumber, setItemNumber] = useState('');
   const [name, setName] = useState('');
   const [notes, setNotes] = useState('');
@@ -47,6 +50,11 @@ export default function AddItemScreen() {
   const [cataloguePickerVisible, setCataloguePickerVisible] = useState(false);
   const [spec, setSpec] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [hasImage, setHasImage] = useState(false);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [imageToken, setImageToken] = useState<string | null>(null);
+  const [imageCacheBuster, setImageCacheBuster] = useState(0);
+  const [imageUploading, setImageUploading] = useState(false);
 
   const { data: rawContainers } = useLiveQuery(
     db.select({ id: item.id, name: item.name, itemNumber: item.itemNumber })
@@ -81,6 +89,47 @@ export default function AddItemScreen() {
       setParentLabel(pre.itemNumber != null ? `#${String(pre.itemNumber).padStart(3, '0')} ${pre.name}` : pre.name);
     }
   }, [initialParentId, containers]);
+
+  async function uploadPhoto(uri: string) {
+    setImageUploading(true);
+    try {
+      const { url, token } = await getImageUrl(newItemId);
+      setImageUrl(url);
+      setImageToken(token);
+      await uploadItemImage(newItemId, uri);
+      setHasImage(true);
+      setImageCacheBuster(v => v + 1);
+    } catch (e) {
+      Alert.alert('Upload failed', e instanceof Error ? e.message : 'Could not upload photo.');
+    } finally {
+      setImageUploading(false);
+    }
+  }
+
+  function pickPhoto() {
+    Alert.alert('Add Photo', undefined, [
+      {
+        text: 'Take Photo',
+        onPress: async () => {
+          const { status } = await ImagePicker.requestCameraPermissionsAsync();
+          if (status !== 'granted') {
+            Alert.alert('Permission required', 'Camera access is needed to take a photo.');
+            return;
+          }
+          const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.8, allowsEditing: true, aspect: [1, 1] });
+          if (!result.canceled && result.assets[0]) await uploadPhoto(result.assets[0].uri);
+        },
+      },
+      {
+        text: 'Choose from Library',
+        onPress: async () => {
+          const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8, allowsEditing: true, aspect: [1, 1] });
+          if (!result.canceled && result.assets[0]) await uploadPhoto(result.assets[0].uri);
+        },
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }
 
   async function save() {
     let num: number | null = null;
@@ -126,6 +175,7 @@ export default function AddItemScreen() {
       }
 
       await db.insert(item).values({
+        id: newItemId,
         itemNumber: num,
         catalogueId: selectedCatalogueId ?? null,
         name: name.trim(),
@@ -133,6 +183,7 @@ export default function AddItemScreen() {
         canContain,
         parentId,
         spec: Object.keys(specToSave).length > 0 ? JSON.stringify(specToSave) : null,
+        hasImage,
         deviceId: await getDeviceId(),
       });
       router.back();
@@ -215,7 +266,42 @@ export default function AddItemScreen() {
           {/* Photo */}
           <View style={styles.section}>
             <Text style={styles.label}>Photo</Text>
-            <Text style={styles.photoHint}>Save this item first to add a photo.</Text>
+            <View style={styles.imageRow}>
+              {hasImage && imageUrl && (
+                <ExpoImage
+                  source={{ uri: `${imageUrl}?t=${imageCacheBuster}`, headers: imageToken ? { 'X-API-Token': imageToken } : {} }}
+                  style={styles.imageThumbnail}
+                  contentFit="cover"
+                />
+              )}
+              <View style={styles.imageButtons}>
+                <Pressable
+                  style={({ pressed }) => [styles.imageBtn, pressed && styles.imageBtnPressed, imageUploading && styles.imageBtnDisabled]}
+                  disabled={imageUploading}
+                  onPress={pickPhoto}
+                >
+                  <Text style={styles.imageBtnText}>
+                    {imageUploading ? 'Uploading…' : hasImage ? 'Change photo' : '📷 Add photo'}
+                  </Text>
+                </Pressable>
+                {hasImage && (
+                  <Pressable
+                    style={({ pressed }) => [styles.imageBtnDanger, pressed && styles.imageBtnDangerPressed]}
+                    onPress={() => {
+                      Alert.alert('Remove photo', 'Remove the photo from this item?', [
+                        { text: 'Cancel', style: 'cancel' },
+                        { text: 'Remove', style: 'destructive', onPress: async () => {
+                          await deleteItemImage(newItemId);
+                          setHasImage(false);
+                        }},
+                      ]);
+                    }}
+                  >
+                    <Text style={styles.imageBtnDangerText}>Remove photo</Text>
+                  </Pressable>
+                )}
+              </View>
+            </View>
           </View>
 
           {/* Custom spec fields */}
@@ -387,7 +473,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#fafafa',
   },
   multiline: { minHeight: 80, paddingTop: 8 },
-  photoHint: { fontSize: 14, color: '#aaa', fontStyle: 'italic' },
+  imageRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginTop: 4 },
+  imageThumbnail: { width: 80, height: 80, borderRadius: 8 },
+  imageButtons: { flex: 1, gap: 8 },
+  imageBtn: { backgroundColor: '#f0f0f5', borderRadius: 8, paddingVertical: 10, paddingHorizontal: 14, alignItems: 'center' },
+  imageBtnPressed: { backgroundColor: '#e0e0ea' },
+  imageBtnDisabled: { opacity: 0.5 },
+  imageBtnText: { fontSize: 15, color: '#007AFF', fontWeight: '500' },
+  imageBtnDanger: { borderRadius: 8, paddingVertical: 10, paddingHorizontal: 14, alignItems: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: '#ff3b30' },
+  imageBtnDangerPressed: { backgroundColor: '#fff0ee' },
+  imageBtnDangerText: { fontSize: 15, color: '#ff3b30' },
   switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   switchLabel: { fontSize: 16, color: '#111' },
   pickerField: {
