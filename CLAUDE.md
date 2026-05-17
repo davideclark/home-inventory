@@ -147,6 +147,13 @@ components/
   SyncButton.tsx           ↻ button used in every tab header — self-contained local state,
                            calls sync() directly (header components are outside the React
                            context tree so context cannot be used here)
+  CatalogueIcon.tsx        Renders a catalogue icon value — emoji char, `si:<slug>` (Simple Icon
+                           via react-native-svg), or `svg:<base64>` (custom SVG via SvgXml).
+  IconPicker.tsx           Full-screen slide-up modal for choosing a catalogue icon. Sections:
+                           Retro & Vintage quick-picks, All Brands (~3 000 Simple Icons),
+                           emoji categories (from @emoji-mart/data), and a custom SVG paste
+                           field. Search filters brands + emoji simultaneously. Used in
+                           app/catalogue/[id].tsx and app/catalogue/add.tsx.
 
 context/
   sync.tsx                 SyncContext + SyncProvider (available for use within screen trees,

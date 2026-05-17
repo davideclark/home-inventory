@@ -9,6 +9,7 @@
     "web": "expo start --web"
   },
   "dependencies": {
+    "@emoji-mart/data": "^1.2.1",
     "@expo-google-fonts/manrope": "^0.4.2",
     "babel-preset-expo": "~54.0.10",
     "drizzle-orm": "^0.45.2",

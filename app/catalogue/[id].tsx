@@ -11,6 +11,8 @@ import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { db } from '../../db';
 import { catalogue, item } from '../../schema';
 import { deleteCatalogue } from '../../sync';
+import CatalogueIcon from '../../components/CatalogueIcon';
+import IconPicker from '../../components/IconPicker';
 
 type FieldDef = { key: string; label: string; type: 'text' | 'number' | 'textarea'; showInList?: boolean };
 
@@ -33,6 +35,7 @@ export default function EditCatalogueScreen() {
   const [fields, setFields] = useState<FieldDef[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [pickerVisible, setPickerVisible] = useState(false);
 
   function addField() {
     setFields(prev => [...prev, { key: '', label: '', type: 'text' }]);
@@ -165,15 +168,20 @@ export default function EditCatalogueScreen() {
           <View style={styles.iconAndName}>
             <View style={styles.iconField}>
               <Text style={styles.label}>Icon</Text>
-              <TextInput
-                style={styles.iconInput}
-                value={icon}
-                onChangeText={setIcon}
-                placeholder="🖥️"
-                maxLength={4}
-                textAlign="center"
-                selectTextOnFocus
-              />
+              <Pressable style={styles.iconButton} onPress={() => setPickerVisible(true)}>
+                {icon ? (
+                  <CatalogueIcon value={icon} size={26} />
+                ) : (
+                  <Text style={styles.iconPlaceholder}>📁</Text>
+                )}
+              </Pressable>
+              {icon ? (
+                <Pressable onPress={() => setIcon('')} style={styles.iconClear}>
+                  <Text style={styles.iconClearText}>remove</Text>
+                </Pressable>
+              ) : (
+                <Text style={styles.iconHint}>tap to set</Text>
+              )}
             </View>
             <View style={styles.nameField}>
               <Text style={styles.label}>
@@ -277,6 +285,13 @@ export default function EditCatalogueScreen() {
           <Text style={styles.deleteButtonText}>Delete Catalogue</Text>
         </Pressable>
       </ScrollView>
+
+      <IconPicker
+        value={icon}
+        visible={pickerVisible}
+        onSelect={setIcon}
+        onClose={() => setPickerVisible(false)}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -314,16 +329,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     backgroundColor: '#fafafa',
   },
-  iconInput: {
+  iconButton: {
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#ccc',
     borderRadius: 8,
-    paddingHorizontal: 4,
-    paddingVertical: 8,
-    fontSize: 22,
+    height: 44,
     backgroundColor: '#fafafa',
-    textAlign: 'center',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
+  iconPlaceholder: { fontSize: 22 },
+  iconClear: { marginTop: 4, alignItems: 'center' },
+  iconClearText: { fontSize: 11, color: '#aaa' },
+  iconHint: { fontSize: 11, color: '#aaa', textAlign: 'center', marginTop: 4 },
   multiline: {
     minHeight: 80,
     paddingTop: 8,
