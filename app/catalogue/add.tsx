@@ -4,7 +4,8 @@ import {
 } from 'react-native';
 import { Text, TextInput } from '../../components/Text';
 import { useState } from 'react';
-import { router } from 'expo-router';
+import { router, useNavigation } from 'expo-router';
+import { usePreventRemove } from '@react-navigation/native';
 import { db } from '../../db';
 import { catalogue } from '../../schema';
 import { getDeviceId } from '../../sync';
@@ -25,6 +26,20 @@ export default function AddCatalogueScreen() {
   const [fields, setFields] = useState<FieldDef[]>([]);
   const [saving, setSaving] = useState(false);
   const [pickerVisible, setPickerVisible] = useState(false);
+
+  const navigation = useNavigation();
+  const isDirty = !!(name || icon || description || sortOrder || fields.length > 0);
+
+  usePreventRemove(isDirty, ({ data }) => {
+    Alert.alert(
+      'Discard changes?',
+      'You have unsaved changes. Are you sure you want to go back?',
+      [
+        { text: 'Keep Editing', style: 'cancel' },
+        { text: 'Discard', style: 'destructive', onPress: () => navigation.dispatch(data.action) },
+      ]
+    );
+  });
 
   function addField() {
     setFields(prev => [...prev, { key: '', label: '', type: 'text' }]);

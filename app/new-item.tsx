@@ -6,7 +6,8 @@ import { Text, TextInput } from '../components/Text';
 import { Image as ExpoImage } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { useState, useEffect, useMemo } from 'react';
-import { useLocalSearchParams, router } from 'expo-router';
+import { useLocalSearchParams, router, useNavigation } from 'expo-router';
+import { usePreventRemove } from '@react-navigation/native';
 import { eq } from 'drizzle-orm';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { db } from '../db';
@@ -55,6 +56,23 @@ export default function AddItemScreen() {
   const [imageToken, setImageToken] = useState<string | null>(null);
   const [imageCacheBuster, setImageCacheBuster] = useState(0);
   const [imageUploading, setImageUploading] = useState(false);
+
+  const navigation = useNavigation();
+  const isDirty = !!(
+    name.trim() || itemNumber.trim() || notes.trim() || hasImage ||
+    Object.values(spec).some(v => v.trim())
+  );
+
+  usePreventRemove(isDirty, ({ data }) => {
+    Alert.alert(
+      'Discard changes?',
+      'You have unsaved changes. Are you sure you want to go back?',
+      [
+        { text: 'Keep Editing', style: 'cancel' },
+        { text: 'Discard', style: 'destructive', onPress: () => navigation.dispatch(data.action) },
+      ]
+    );
+  });
 
   const { data: rawContainers } = useLiveQuery(
     db.select({ id: item.id, name: item.name, itemNumber: item.itemNumber })
