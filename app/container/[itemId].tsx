@@ -1,7 +1,7 @@
 import { FlatList, View, StyleSheet, Pressable, Alert, SectionList } from 'react-native';
 import { Text } from '../../components/Text';
-import { useLocalSearchParams, router, Stack } from 'expo-router';
-import { useRef, useMemo } from 'react';
+import { useLocalSearchParams, router, Stack, useNavigation } from 'expo-router';
+import { useRef, useMemo, useEffect } from 'react';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { eq, isNotNull } from 'drizzle-orm';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
@@ -45,8 +45,49 @@ function buildPath(parentId: string | null | undefined, map: ContainerMap): stri
   return parts.join(' › ');
 }
 
+// Shared across all ContainerScreen instances — records when any container was legitimately popped
+let lastContainerPopAt = 0;
+
 export default function ContainerScreen() {
   const { itemId } = useLocalSearchParams<{ itemId: string }>();
+  const navigation = useNavigation();
+  const blurredAt = useRef(0);
+  const focusedAt = useRef(0);
+  const lastBackAt = useRef(0);
+
+  useEffect(() => {
+    const nav = navigation as any;
+
+    const subs = [
+      nav.addListener('blur', () => {
+        blurredAt.current = Date.now();
+      }),
+      nav.addListener('focus', () => {
+        focusedAt.current = Date.now();
+      }),
+      nav.addListener('beforeRemove', (e: any) => {
+        const now = Date.now();
+        const msSinceLastPop = now - lastContainerPopAt;
+        const isBlurred = blurredAt.current > focusedAt.current;
+
+        // Guard 1: another container was just popped (module-level cooldown, no timing race)
+        if (lastContainerPopAt > 0 && msSinceLastPop < 400) {
+          e.preventDefault();
+          return;
+        }
+
+        // Guard 2: this screen is still blurred (something is on top of it)
+        if (isBlurred) {
+          e.preventDefault();
+          return;
+        }
+
+        // Legitimate pop — record timestamp for module-level cooldown
+        lastContainerPopAt = now;
+      }),
+    ];
+    return () => { subs.forEach(fn => fn()); };
+  }, [navigation]);
 
   const { data: containerData } = useLiveQuery(
     db.select({ id: item.id, name: item.name, itemNumber: item.itemNumber, parentId: item.parentId, notes: item.notes })
@@ -134,8 +175,24 @@ export default function ContainerScreen() {
       <Stack.Screen
         options={{
           title,
-          headerBackTitle: '',
-          headerBackButtonDisplayMode: 'minimal',
+          // Custom back button replaces the native UIKit back button to prevent a double-pop
+          // bug: tapping back quickly causes the native UIKit touch to bleed through to the
+          // underlying ContainerScreen's native back button, popping two levels at once.
+          // The 500ms debounce + JS-controlled Pressable eliminates the UIKit target entirely.
+          headerLeft: () => (
+            <Pressable
+              onPress={() => {
+                const now = Date.now();
+                if (now - lastBackAt.current < 500) return;
+                lastBackAt.current = now;
+                router.back();
+              }}
+              hitSlop={{ top: 12, bottom: 12, left: 8, right: 24 }}
+              style={{ paddingHorizontal: 8, paddingVertical: 8, alignItems: 'center', justifyContent: 'center' }}
+            >
+              <Text style={{ color: '#007AFF', fontSize: 28, lineHeight: 28, includeFontPadding: false }}>‹</Text>
+            </Pressable>
+          ),
           headerRight: () => (
             <Pressable
               onPress={() => router.push({ pathname: '/new-item', params: { parentId: itemId } })}
