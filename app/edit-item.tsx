@@ -16,22 +16,14 @@ import CatalogueIcon from '../components/CatalogueIcon';
 
 type FieldDef = { key: string; label: string; type: 'text' | 'number' | 'textarea' };
 
-function naturalSort(a: string, b: string): number {
-  const re = /(\d+)/g;
-  const ap = a.split(re);
-  const bp = b.split(re);
-  for (let i = 0; i < Math.max(ap.length, bp.length); i++) {
-    const as = ap[i] ?? '';
-    const bs = bp[i] ?? '';
-    if (i % 2 === 1) {
-      const diff = parseInt(as, 10) - parseInt(bs, 10);
-      if (diff !== 0) return diff;
-    } else {
-      const cmp = as.toLowerCase() < bs.toLowerCase() ? -1 : as.toLowerCase() > bs.toLowerCase() ? 1 : 0;
-      if (cmp !== 0) return cmp;
-    }
-  }
-  return 0;
+type ContainerRecord = { id: string; name: string; parentId: string | null };
+
+function buildPath(id: string, map: Map<string, ContainerRecord>, depth = 0): string {
+  if (depth > 10) return '…';
+  const c = map.get(id);
+  if (!c) return 'Unknown';
+  if (!c.parentId) return c.name;
+  return `${buildPath(c.parentId, map, depth + 1)} › ${c.name}`;
 }
 
 export default function EditItemScreen() {
@@ -43,14 +35,21 @@ export default function EditItemScreen() {
   const existing = itemData?.[0];
 
   const { data: rawContainers } = useLiveQuery(
-    db.select({ id: item.id, name: item.name, itemNumber: item.itemNumber })
+    db.select({ id: item.id, name: item.name, itemNumber: item.itemNumber, parentId: item.parentId })
       .from(item)
       .where(and(eq(item.canContain, true), ne(item.id, itemId)))
   );
 
-  const containers = useMemo(
-    () => [...(rawContainers ?? [])].sort((a, b) => naturalSort(a.name, b.name)),
+  const containerMap = useMemo(
+    () => new Map((rawContainers ?? []).map(c => [c.id, c])),
     [rawContainers]
+  );
+
+  const containers = useMemo(
+    () => [...(rawContainers ?? [])].sort((a, b) =>
+      buildPath(a.id, containerMap).localeCompare(buildPath(b.id, containerMap))
+    ),
+    [rawContainers, containerMap]
   );
 
   const { data: catalogues } = useLiveQuery(
@@ -87,12 +86,7 @@ export default function EditItemScreen() {
     setCanContain(existing.canContain);
     setParentId(existing.parentId ?? null);
     if (existing.parentId) {
-      const parent = containers.find(c => c.id === existing.parentId);
-      if (parent) {
-        setParentLabel(parent.itemNumber != null
-          ? `#${String(parent.itemNumber).padStart(3, '0')} ${parent.name}`
-          : parent.name);
-      }
+      setParentLabel(buildPath(existing.parentId, containerMap));
     }
     setCatalogueId(existing.catalogueId ?? null);
     if (existing.catalogueId) {
@@ -119,7 +113,7 @@ export default function EditItemScreen() {
       });
     }
     setLoaded(true);
-  }, [existing, containers, catalogues, loaded]);
+  }, [existing, containers, catalogues, loaded, containerMap]);
 
   async function save() {
     let num: number | null = null;
@@ -510,15 +504,11 @@ export default function EditItemScreen() {
                 style={[styles.pickerRow, parentId === c.id && styles.pickerRowSelected]}
                 onPress={() => {
                   setParentId(c.id);
-                  setParentLabel(c.itemNumber != null
-                    ? `#${String(c.itemNumber).padStart(3, '0')} ${c.name}`
-                    : c.name);
+                  setParentLabel(buildPath(c.id, containerMap));
                   setPickerVisible(false);
                 }}
               >
-                <Text style={styles.pickerRowText}>
-                  {c.itemNumber != null ? `#${String(c.itemNumber).padStart(3, '0')} ` : ''}{c.name}
-                </Text>
+                <Text style={styles.pickerRowText}>{buildPath(c.id, containerMap)}</Text>
                 {parentId === c.id && <Text style={styles.pickerCheck}>✓</Text>}
               </Pressable>
             )}
