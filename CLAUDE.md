@@ -127,7 +127,9 @@ app/
     index.tsx              Catalogues list — sorted by name, swipe left Edit/Delete, tap to drill in
     containers.tsx         Root containers list — tap to drill into hierarchy
     search.tsx             Full-text search across all catalogues
-    settings.tsx           Server config — URL + token entry, Test & Save, Disconnect; app version shown at bottom
+    settings.tsx           Server config — URL + token entry, Test & Save, Disconnect; MAINTENANCE section
+                           with "Remove Orphaned Containers" button (detects containers whose parentId points
+                           to a deleted item; deletes via deleteContainer with tombstones); app version at bottom
   catalogue/
     add.tsx                Add Catalogue modal
     [id].tsx               Edit Catalogue modal (also handles delete)
@@ -280,9 +282,10 @@ All mutable tables carry `device_id`, `last_modified`, and `synced` for offline-
 - After any schema change: run `npx drizzle-kit generate`, then restart with `npx expo start --clear`.
 - Plain `r` in the Expo console reloads the JS bundle. Only restart the server (and rescan) after installing new native packages.
 - `automaticallyAdjustKeyboardInsets` on ScrollView handles keyboard insets on iOS (RN 0.81+) — do not use KeyboardAvoidingView.
-- Container path display: load all `canContain=true` items into a `Map`, walk `parentId` chain upward. See `buildPath()` in `items/[catalogueId].tsx`.
+- Container path display: load all `canContain=true` items into a `Map`, walk `parentId` chain upward via `buildPath()`. Used in `items/[catalogueId].tsx` (item list subtitles), `new-item.tsx`, and `edit-item.tsx` (container picker — sorted and labelled by full path, e.g. "Clarence Road › Games Room › Shelf 3").
 - **Header components** (headerLeft/headerRight in tab options) are rendered by React Navigation outside the screen's React tree — they cannot consume React context from providers inside the Stack. `SyncButton` uses local `useState` and calls `sync()` directly for this reason.
 - **Discard-changes guard on modals**: use `usePreventRemove(isDirty, ({ data }) => { ... })` from `@react-navigation/native` — NOT `beforeRemove` + `e.preventDefault()`. The `beforeRemove` approach throws a warning and fails silently on native-stack because UIKit has already started the dismiss animation before JS fires. `usePreventRemove` integrates with UIKit's gesture recogniser correctly. See `app/catalogue/add.tsx` and `app/new-item.tsx` for the pattern.
+  - **Critical**: never call `router.back()` synchronously after saving — `usePreventRemove` captures `isDirty` at the time of the call, which is still `true` before the state update re-renders. Instead, set an `isSaved` state to `true`, compute `isDirty` as `!isSaved && ...`, and navigate in a `useEffect(() => { if (isSaved) router.back(); }, [isSaved])`. By the time the effect fires, the re-render has run with `isDirty = false` and the guard steps down.
 - **`container/[itemId].tsx` uses a custom `headerLeft` back button — DO NOT replace it with the native UIKit back button.** Root cause: on iOS, tapping the native UIKit back button quickly causes the touch to bleed through to the underlying screen's native UIKit back button during the dismiss animation, popping two container levels at once. The fix is a custom React Native `Pressable` with a 500ms debounce via `lastBackAt` ref. JS-side `beforeRemove` + `e.preventDefault()` approaches are retained as a safety net but are insufficient on their own — the UIKit bleed-through happens at the native layer before JS fires. Removing `headerLeft` or the debounce will re-introduce the double-pop bug.
 - `.npmrc` sets `legacy-peer-deps=true` — required for `npx expo install` and EAS Build `npm ci` to resolve React peer dependency conflicts.
 - **Fonts**: 4 Manrope weights loaded in `app/_layout.tsx` via `useFonts` from `@expo-google-fonts/manrope`. The loading gate checks `!fontsLoaded || !success` so the app never renders before fonts are ready. `components/Text.tsx` wraps `Text`/`TextInput` and auto-maps `fontWeight` values (`400`/`500`/`600`/`700`) to the correct `Manrope_*` `fontFamily` — all screens import from there instead of react-native directly.
