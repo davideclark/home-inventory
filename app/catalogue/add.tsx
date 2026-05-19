@@ -3,7 +3,7 @@ import {
   ScrollView, Alert,
 } from 'react-native';
 import { Text, TextInput } from '../../components/Text';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { router, useNavigation } from 'expo-router';
 import { usePreventRemove } from '@react-navigation/native';
 import { db } from '../../db';
@@ -27,8 +27,9 @@ export default function AddCatalogueScreen() {
   const [saving, setSaving] = useState(false);
   const [pickerVisible, setPickerVisible] = useState(false);
 
+  const [isSaved, setIsSaved] = useState(false);
   const navigation = useNavigation();
-  const isDirty = !!(name || icon || description || sortOrder || fields.length > 0);
+  const isDirty = !isSaved && !!(name || icon || description || sortOrder || fields.length > 0);
 
   usePreventRemove(isDirty, ({ data }) => {
     Alert.alert(
@@ -40,6 +41,10 @@ export default function AddCatalogueScreen() {
       ]
     );
   });
+
+  useEffect(() => {
+    if (isSaved) router.back();
+  }, [isSaved]);
 
   function addField() {
     setFields(prev => [...prev, { key: '', label: '', type: 'text' }]);
@@ -81,7 +86,7 @@ export default function AddCatalogueScreen() {
         fields: fields.length > 0 ? JSON.stringify(fields) : null,
         deviceId: await getDeviceId(),
       });
-      router.back();
+      setIsSaved(true);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       Alert.alert('Save failed', msg);

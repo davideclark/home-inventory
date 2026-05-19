@@ -57,8 +57,9 @@ export default function AddItemScreen() {
   const [imageCacheBuster, setImageCacheBuster] = useState(0);
   const [imageUploading, setImageUploading] = useState(false);
 
+  const [isSaved, setIsSaved] = useState(false);
   const navigation = useNavigation();
-  const isDirty = !!(
+  const isDirty = !isSaved && !!(
     name.trim() || itemNumber.trim() || notes.trim() || hasImage ||
     Object.values(spec).some(v => v.trim())
   );
@@ -73,6 +74,10 @@ export default function AddItemScreen() {
       ]
     );
   });
+
+  useEffect(() => {
+    if (isSaved) router.back();
+  }, [isSaved]);
 
   const { data: rawContainers } = useLiveQuery(
     db.select({ id: item.id, name: item.name, itemNumber: item.itemNumber })
@@ -204,7 +209,7 @@ export default function AddItemScreen() {
         hasImage,
         deviceId: await getDeviceId(),
       });
-      router.back();
+      setIsSaved(true);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       Alert.alert('Save failed', msg);
