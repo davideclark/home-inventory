@@ -1,12 +1,12 @@
-import { View, StyleSheet, Pressable, ActivityIndicator, ScrollView, Keyboard } from 'react-native';
+import { View, StyleSheet, Pressable, ActivityIndicator, ScrollView, Keyboard, Alert } from 'react-native';
 import { Text, TextInput } from '../../components/Text';
 import { useState, useCallback } from 'react';
 import { useFocusEffect } from 'expo-router';
 import Constants from 'expo-constants';
-import { eq } from 'drizzle-orm';
+import { eq, isNotNull, and } from 'drizzle-orm';
 import { db } from '../../db';
-import { settings } from '../../schema';
-import { clearApiConfigCache } from '../../sync';
+import { settings, item } from '../../schema';
+import { clearApiConfigCache, deleteContainer } from '../../sync';
 
 type Status = 'idle' | 'testing' | 'ok' | 'error';
 
@@ -26,6 +26,7 @@ export default function SettingsScreen() {
   const [status, setStatus] = useState<Status>('idle');
   const [statusMsg, setStatusMsg] = useState('');
   const [saving, setSaving] = useState(false);
+  const [cleaning, setCleaning] = useState(false);
 
   useFocusEffect(useCallback(() => {
     (async () => {
@@ -78,6 +79,46 @@ export default function SettingsScreen() {
     } finally {
       setSaving(false);
     }
+  }
+
+  async function removeOrphanedContainers() {
+    const allItems = await db.select({ id: item.id }).from(item);
+    const allIds = new Set(allItems.map(r => r.id));
+
+    const candidates = await db
+      .select({ id: item.id, name: item.name, parentId: item.parentId })
+      .from(item)
+      .where(and(eq(item.canContain, true), isNotNull(item.parentId)));
+
+    const orphans = candidates.filter(c => c.parentId && !allIds.has(c.parentId));
+
+    if (orphans.length === 0) {
+      Alert.alert('No orphans found', 'All containers have valid parents.');
+      return;
+    }
+
+    Alert.alert(
+      `Remove ${orphans.length} orphaned container${orphans.length === 1 ? '' : 's'}?`,
+      orphans.map(o => o.name).join(', '),
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            setCleaning(true);
+            try {
+              for (const orphan of orphans) {
+                await deleteContainer(orphan.id, { cascade: true });
+              }
+              Alert.alert('Done', `Removed ${orphans.length} orphaned container${orphans.length === 1 ? '' : 's'}.`);
+            } finally {
+              setCleaning(false);
+            }
+          },
+        },
+      ]
+    );
   }
 
   async function disconnect() {
@@ -135,6 +176,17 @@ export default function SettingsScreen() {
         </Pressable>
       ) : null}
 
+      <Text style={[styles.sectionHeader, styles.maintenanceHeader]}>MAINTENANCE</Text>
+      <Pressable
+        style={[styles.maintenanceButton, cleaning && styles.buttonDisabled]}
+        onPress={removeOrphanedContainers}
+        disabled={cleaning}
+      >
+        {cleaning
+          ? <ActivityIndicator color="#555" />
+          : <Text style={styles.maintenanceButtonText}>Remove Orphaned Containers</Text>}
+      </Pressable>
+
       <Text style={styles.versionText}>v{Constants.expoConfig?.version ?? '—'}</Text>
     </ScrollView>
   );
@@ -156,5 +208,8 @@ const styles = StyleSheet.create({
   buttonText: { color: '#fff', fontSize: 17, fontWeight: '600' },
   disconnectButton: { alignItems: 'center', paddingVertical: 12 },
   disconnectText: { color: '#ff3b30', fontSize: 16 },
+  maintenanceHeader: { marginTop: 24 },
+  maintenanceButton: { backgroundColor: '#f2f2f7', borderRadius: 10, paddingVertical: 14, alignItems: 'center', marginBottom: 12, borderWidth: StyleSheet.hairlineWidth, borderColor: '#ccc' },
+  maintenanceButtonText: { color: '#333', fontSize: 16, fontWeight: '500' },
   versionText: { fontSize: 12, color: '#bbb', textAlign: 'center', marginTop: 16 },
 });
