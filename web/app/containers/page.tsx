@@ -15,17 +15,16 @@ export default function ContainersPage() {
     queryFn: () => api.items.list<Item[]>({ canContain: 'true' }),
   });
 
-  const { data: parentIdList = [] } = useQuery({
-    queryKey: ['items', 'parent-ids'],
-    queryFn: () => api.items.parentIds(),
-  });
-
-  const parentIdSet = useMemo(() => new Set(parentIdList), [parentIdList]);
-
   const { data: allLeafItems = [] } = useQuery({
     queryKey: ['items-by-parent'],
     queryFn: () => api.items.list<Item[]>(),
   });
+
+  const parentIdSet = useMemo(() => {
+    const set = new Set<string>();
+    allLeafItems.forEach(it => { if (it.parentId) set.add(it.parentId); });
+    return set;
+  }, [allLeafItems]);
 
   const { data: catalogues = [] } = useQuery({
     queryKey: ['catalogues'],
@@ -112,8 +111,8 @@ export default function ContainersPage() {
                     : c.notes ? <div className="text-xs text-gray-400 mt-0.5">{c.notes}</div> : null;
                 })()}
               </div>
-              <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                {parentIdSet.has(c.id) && <Link href={`/containers/${c.id}`} className="btn-sm">Browse Contents</Link>}
+              <div className="flex gap-2 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                {parentIdSet.has(c.id) && <Link href={`/containers/${c.id}`} className="btn-sm whitespace-nowrap">Browse Contents</Link>}
                 <button onClick={() => setEditItem(c)} className="btn-sm">Edit</button>
                 <button onClick={() => handleDeleteClick(c)} className="btn-sm-danger">Delete</button>
               </div>

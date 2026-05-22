@@ -44,12 +44,14 @@ export default function ItemModal({ item, defaultCatalogueId, defaultParentId, d
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [catalogueOpen, setCatalogueOpen] = useState(false);
+  const [containerOpen, setContainerOpen] = useState(false);
   const [specValues, setSpecValues] = useState<Record<string, string>>({});
   const [imageKey, setImageKey] = useState(0);
   const [imageUploading, setImageUploading] = useState(false);
   const [hasImage, setHasImage] = useState(item?.hasImage ?? false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const catalogueRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const { data: catalogues = [] } = useQuery({
     queryKey: ['catalogues'],
@@ -61,10 +63,29 @@ export default function ItemModal({ item, defaultCatalogueId, defaultParentId, d
     queryFn: () => api.items.list<Item[]>({ canContain: 'true' }),
   });
 
+  const { data: allItems = [] } = useQuery({
+    queryKey: ['items-by-parent'],
+    queryFn: () => api.items.list<Item[]>(),
+  });
+
   const containerMap = new Map(containers.map(c => [c.id, c]));
   const sortedContainers = [...containers].sort((a, b) =>
     buildPath(a.id, containerMap).localeCompare(buildPath(b.id, containerMap))
   );
+
+  const cataloguesByContainer = (() => {
+    const catalogueMap = new Map(catalogues.map(c => [c.id, c.name]));
+    const map = new Map<string, string[]>();
+    allItems.forEach(it => {
+      if (!it.parentId || !it.catalogueId) return;
+      const catName = catalogueMap.get(it.catalogueId);
+      if (!catName) return;
+      const existing = map.get(it.parentId);
+      if (!existing) { map.set(it.parentId, [catName]); return; }
+      if (!existing.includes(catName)) existing.push(catName);
+    });
+    return map;
+  })();
 
   useEffect(() => {
     if (!catalogueOpen) return;
@@ -74,6 +95,15 @@ export default function ItemModal({ item, defaultCatalogueId, defaultParentId, d
     document.addEventListener('mousedown', handle);
     return () => document.removeEventListener('mousedown', handle);
   }, [catalogueOpen]);
+
+  useEffect(() => {
+    if (!containerOpen) return;
+    function handle(e: MouseEvent) {
+      if (!containerRef.current?.contains(e.target as Node)) setContainerOpen(false);
+    }
+    document.addEventListener('mousedown', handle);
+    return () => document.removeEventListener('mousedown', handle);
+  }, [containerOpen]);
 
   useEffect(() => {
     if (item) {
@@ -237,15 +267,53 @@ export default function ItemModal({ item, defaultCatalogueId, defaultParentId, d
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Container</label>
-            <select value={form.parentId} onChange={e => set('parentId', e.target.value)} className="select">
-              <option value="">— none (root item) —</option>
-              {sortedContainers
-                .filter(c => !isEdit || c.id !== item?.id)
-                .map(c => (
-                  <option key={c.id} value={c.id}>{buildPath(c.id, containerMap)}</option>
-                ))
-              }
-            </select>
+            <div ref={containerRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setContainerOpen(p => !p)}
+                className="select flex items-center gap-2 text-left w-full"
+              >
+                {form.parentId ? (
+                  <span className="flex-1 truncate text-sm">{buildPath(form.parentId, containerMap)}</span>
+                ) : (
+                  <span className="flex-1 text-gray-400 text-sm">— none (root item) —</span>
+                )}
+                <span className="text-gray-400 text-xs shrink-0">▾</span>
+              </button>
+              {containerOpen && (
+                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-72 overflow-y-auto">
+                  <button
+                    type="button"
+                    onClick={() => { set('parentId', ''); setContainerOpen(false); }}
+                    className="w-full flex items-center px-3 py-2 text-sm hover:bg-gray-50 text-gray-400"
+                  >
+                    — none (root item) —
+                  </button>
+                  {sortedContainers
+                    .filter(c => !isEdit || c.id !== item?.id)
+                    .map(c => {
+                      const cats = cataloguesByContainer.get(c.id);
+                      const subtitle = cats?.length ? cats.join(', ') : c.notes;
+                      return (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => { set('parentId', c.id); setContainerOpen(false); }}
+                          className={`w-full flex flex-col items-start px-3 py-2 text-sm hover:bg-gray-50 text-left ${
+                            form.parentId === c.id ? 'bg-blue-50 text-blue-600' : ''
+                          }`}
+                        >
+                          <span className="truncate w-full">{buildPath(c.id, containerMap)}</span>
+                          {subtitle && (
+                            <span className="text-xs text-gray-400 truncate w-full mt-0.5">{subtitle}</span>
+                          )}
+                        </button>
+                      );
+                    })
+                  }
+                </div>
+              )}
+            </div>
           </div>
         </div>
 

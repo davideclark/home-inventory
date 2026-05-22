@@ -8,7 +8,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useState, useEffect, useMemo } from 'react';
 import { useLocalSearchParams, router, useNavigation } from 'expo-router';
 import { usePreventRemove } from '@react-navigation/native';
-import { eq } from 'drizzle-orm';
+import { eq, isNotNull } from 'drizzle-orm';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { db } from '../db';
 import { item, catalogue, generateId } from '../schema';
@@ -17,7 +17,7 @@ import CatalogueIcon from '../components/CatalogueIcon';
 
 type FieldDef = { key: string; label: string; type: 'text' | 'number' | 'textarea' };
 
-type ContainerRecord = { id: string; name: string; parentId: string | null };
+type ContainerRecord = { id: string; name: string; parentId: string | null; notes: string | null };
 
 function buildPath(id: string, map: Map<string, ContainerRecord>, depth = 0): string {
   if (depth > 10) return '…';
@@ -72,7 +72,7 @@ export default function AddItemScreen() {
   }, [isSaved]);
 
   const { data: rawContainers } = useLiveQuery(
-    db.select({ id: item.id, name: item.name, itemNumber: item.itemNumber, parentId: item.parentId })
+    db.select({ id: item.id, name: item.name, itemNumber: item.itemNumber, parentId: item.parentId, notes: item.notes })
       .from(item)
       .where(eq(item.canContain, true))
   );
@@ -88,6 +88,24 @@ export default function AddItemScreen() {
     ),
     [rawContainers, containerMap]
   );
+
+  const { data: catSummaryRows } = useLiveQuery(
+    db.select({ parentId: item.parentId, catalogueName: catalogue.name })
+      .from(item)
+      .leftJoin(catalogue, eq(item.catalogueId, catalogue.id))
+      .where(isNotNull(item.parentId))
+  );
+
+  const cataloguesByContainer = useMemo(() => {
+    const map = new Map<string, string[]>();
+    catSummaryRows?.forEach(row => {
+      if (!row.parentId || !row.catalogueName) return;
+      const existing = map.get(row.parentId);
+      if (!existing) { map.set(row.parentId, [row.catalogueName]); return; }
+      if (!existing.includes(row.catalogueName)) existing.push(row.catalogueName);
+    });
+    return map;
+  }, [catSummaryRows]);
 
   const { data: catalogues } = useLiveQuery(
     db.select({ id: catalogue.id, name: catalogue.name, icon: catalogue.icon, fields: catalogue.fields })
@@ -439,19 +457,26 @@ export default function AddItemScreen() {
           <FlatList
             data={containers}
             keyExtractor={(c) => c.id}
-            renderItem={({ item: c }) => (
-              <Pressable
-                style={[styles.pickerRow, parentId === c.id && styles.pickerRowSelected]}
-                onPress={() => {
-                  setParentId(c.id);
-                  setParentLabel(buildPath(c.id, containerMap));
-                  setPickerVisible(false);
-                }}
-              >
-                <Text style={styles.pickerRowText}>{buildPath(c.id, containerMap)}</Text>
-                {parentId === c.id && <Text style={styles.pickerCheck}>✓</Text>}
-              </Pressable>
-            )}
+            renderItem={({ item: c }) => {
+              const cats = cataloguesByContainer.get(c.id);
+              const subtitle = cats?.length ? cats.join(', ') : c.notes;
+              return (
+                <Pressable
+                  style={[styles.pickerRow, parentId === c.id && styles.pickerRowSelected]}
+                  onPress={() => {
+                    setParentId(c.id);
+                    setParentLabel(buildPath(c.id, containerMap));
+                    setPickerVisible(false);
+                  }}
+                >
+                  <View style={styles.pickerRowBody}>
+                    <Text style={styles.pickerRowText}>{buildPath(c.id, containerMap)}</Text>
+                    {subtitle ? <Text style={styles.pickerRowNotes} numberOfLines={1}>{subtitle}</Text> : null}
+                  </View>
+                  {parentId === c.id && <Text style={styles.pickerCheck}>✓</Text>}
+                </Pressable>
+              );
+            }}
             ItemSeparatorComponent={() => <View style={styles.separator} />}
             ListEmptyComponent={
               <View style={styles.pickerEmpty}>
@@ -546,12 +571,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingVertical: 12,
     backgroundColor: '#fff',
   },
   pickerRowSelected: { backgroundColor: '#f0f7ff' },
-  pickerRowText: { flex: 1, fontSize: 16, color: '#111' },
-  pickerCheck: { fontSize: 16, color: '#007AFF', fontWeight: '600' },
+  pickerRowBody: { flex: 1 },
+  pickerRowText: { fontSize: 16, color: '#111' },
+  pickerRowNotes: { fontSize: 12, color: '#888', marginTop: 2 },
+  pickerCheck: { fontSize: 16, color: '#007AFF', fontWeight: '600', marginLeft: 8 },
   separator: { height: StyleSheet.hairlineWidth, backgroundColor: '#eee', marginLeft: 16 },
   pickerEmpty: { padding: 40, alignItems: 'center' },
   pickerEmptyText: { fontSize: 14, color: '#888', textAlign: 'center', lineHeight: 20 },

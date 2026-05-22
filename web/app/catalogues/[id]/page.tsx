@@ -123,9 +123,9 @@ export default function CatalogueItemsPage() {
                   ))}
                   <td className="px-4 py-3 text-gray-500 text-xs truncate max-w-xs">{it.notes ?? ''}</td>
                   <td className="px-4 py-3">
-                    <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity justify-end">
+                    <div className="flex gap-2 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity justify-end">
                       {it.canContain && parentIdSet.has(it.id) && (
-                        <button onClick={() => router.push(`/containers/${it.id}`)} className="btn-sm">Browse Contents</button>
+                        <button onClick={() => router.push(`/containers/${it.id}`)} className="btn-sm whitespace-nowrap">Browse Contents</button>
                       )}
                       <button onClick={() => setEditItem(it)} className="btn-sm">Edit</button>
                       <button onClick={() => setConfirmId(it.id)} className="btn-sm-danger">Delete</button>

@@ -205,7 +205,11 @@ web/
     Nav.tsx                Top navigation bar — House-Box logo + Manrope, bg-primary
     Modal.tsx              Reusable modal wrapper
     ConfirmDialog.tsx      Delete confirmation dialog
-    ItemModal.tsx          Add/edit item form — all fields + container picker
+    ItemModal.tsx          Add/edit item form — all fields + container picker (custom div-based
+                           dropdown, not a native select — same pattern as the catalogue picker).
+                           Each container option shows the full path as primary text and catalogue
+                           names (or notes as fallback) as a subtitle. Uses an `allItems` query
+                           (queryKey: ['items-by-parent']) to build the cataloguesByContainer map.
     ItemDetailModal.tsx    Read-only item detail dialog — image (with lightbox), all spec fields, notes, location path; Edit button opens ItemModal
   lib/
     api.ts                 Fetch wrappers for all API endpoints
@@ -283,6 +287,7 @@ All mutable tables carry `device_id`, `last_modified`, and `synced` for offline-
 - Plain `r` in the Expo console reloads the JS bundle. Only restart the server (and rescan) after installing new native packages.
 - `automaticallyAdjustKeyboardInsets` on ScrollView handles keyboard insets on iOS (RN 0.81+) — do not use KeyboardAvoidingView.
 - Container path display: load all `canContain=true` items into a `Map`, walk `parentId` chain upward via `buildPath()`. Used in `items/[catalogueId].tsx` (item list subtitles), `new-item.tsx`, and `edit-item.tsx` (container picker — sorted and labelled by full path, e.g. "Clarence Road › Games Room › Shelf 3").
+- **Container picker subtitles** (`new-item.tsx`, `edit-item.tsx`): each picker row shows the container path as the primary text, then a subtitle line showing the catalogue names of items inside that container (e.g. "Graphics Cards, Consoles"), falling back to the container's own `notes` if no categorised items exist. Requires a second `useLiveQuery` joining `item` with `catalogue` (same pattern as `containers.tsx`). DO NOT simplify this to notes-only — the catalogue-names-first logic is intentional.
 - **Header components** (headerLeft/headerRight in tab options) are rendered by React Navigation outside the screen's React tree — they cannot consume React context from providers inside the Stack. `SyncButton` uses local `useState` and calls `sync()` directly for this reason.
 - **Discard-changes guard on modals**: use `usePreventRemove(isDirty, ({ data }) => { ... })` from `@react-navigation/native` — NOT `beforeRemove` + `e.preventDefault()`. The `beforeRemove` approach throws a warning and fails silently on native-stack because UIKit has already started the dismiss animation before JS fires. `usePreventRemove` integrates with UIKit's gesture recogniser correctly. See `app/catalogue/add.tsx` and `app/new-item.tsx` for the pattern.
   - **Critical**: never call `router.back()` synchronously after saving — `usePreventRemove` captures `isDirty` at the time of the call, which is still `true` before the state update re-renders. Instead, set an `isSaved` state to `true`, compute `isDirty` as `!isSaved && ...`, and navigate in a `useEffect(() => { if (isSaved) router.back(); }, [isSaved])`. By the time the effect fires, the re-render has run with `isDirty = false` and the guard steps down.
@@ -303,7 +308,8 @@ All mutable tables carry `device_id`, `last_modified`, and `synced` for offline-
 - `/api/discover` returns `{ name, version, requiresToken }` — used by the app's Settings screen to identify and verify the server.
 - API runs migrations automatically on startup via `drizzle-orm/postgres-js/migrator`.
 - **Image endpoints**: `POST /api/items/:id/image` (upload), `GET /api/items/:id/image` (serve), `DELETE /api/items/:id/image` (remove). Files stored at `<IMAGE_PATH>/<id>.jpg`. `IMAGE_PATH` env var defaults to `./images`; in prod it is `/images` (mapped to Docker volume). All three are token-protected.
-- **Parent IDs endpoint**: `GET /api/items/parent-ids` returns a `string[]` of all distinct `parentId` values. Used by web catalogue and container pages to determine which items have children (and therefore show a Browse Contents button). Must be registered before `GET /api/items/:id` in the route order.
+- **Parent IDs endpoint**: `GET /api/items/parent-ids` returns a `string[]` of all distinct `parentId` values. Must be registered before `GET /api/items/:id` in the route order. Used by `web/app/catalogues/[id]/page.tsx` for the Browse Contents button. **`web/app/containers/page.tsx` and `web/app/containers/[id]/page.tsx` do NOT use this endpoint** — they compute `parentIdSet` locally from the `allLeafItems` query (queryKey: `['items-by-parent']`) which they already fetch for the catalogue-names subtitle. Do not revert this to the API endpoint approach — computing locally is more reliable and removes a network dependency.
+- **Browse Contents button** (web): appears on container rows in `containers/page.tsx`, `containers/[id]/page.tsx`, and `catalogues/[id]/page.tsx`. The button row div must have `shrink-0` (so it isn't squeezed by the name column) and the button itself must have `whitespace-nowrap` (so "Browse Contents" never wraps to a second line). Do not remove these classes.
 - **Backup/restore**: `GET /api/backup` returns a ZIP containing `data.json` (all catalogues + items) + `images/<id>.jpg` for each item with a photo. `POST /api/restore` accepts a multipart ZIP upload and does a full wipe-and-replace (sync_log → sync_tombstone → items → catalogues → image files, then reimports). Uses `jszip`. Exposed via web Settings page (Export Backup / Import Backup buttons).
 
 ## MCP Servers
