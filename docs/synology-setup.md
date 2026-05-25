@@ -176,7 +176,7 @@ The containers now bind on ports 13000/13001 internally. Nothing external can re
 
 ### Step 4 — Create DSM Reverse Proxy rules
 
-DSM → **Control Panel** → **Application Portal** → **Reverse Proxy** tab → **Create**
+DSM → **Control Panel** → **Login Portal** → **Advanced** tab → **Reverse Proxy** → **Create**
 
 **Rule 1 — API**
 
