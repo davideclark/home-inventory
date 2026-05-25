@@ -1,6 +1,6 @@
 # Synology NAS Setup Guide
 
-A complete guide for deploying the Home Inventory app on a Synology NAS, including HTTPS setup for secure remote access via Tailscale.
+A complete guide for deploying the Home Inventory app on a Synology NAS, including HTTPS setup for secure remote access.
 
 ---
 
@@ -8,7 +8,6 @@ A complete guide for deploying the Home Inventory app on a Synology NAS, includi
 
 - Synology NAS running **DSM 7.2 or later**
 - **Container Manager** installed (Package Center → search "Container Manager")
-- **Tailscale** installed and signed in to your tailnet (Package Center → search "Tailscale")
 - The **Home Inventory mobile app** installed on your iPhone or Android
 
 ---
@@ -63,7 +62,7 @@ services:
     volumes:
       - ${IMAGES_PATH:-/volume1/docker/home-inventory/images}:/images
     ports:
-      - "${API_PORT:-3000}:3000"
+      - "${API_PORT:-3002}:3000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -75,13 +74,15 @@ services:
       API_URL: http://api:3000
       API_TOKEN: ${API_TOKEN}
     ports:
-      - "${WEB_PORT:-3001}:3001"
+      - "${WEB_PORT:-3003}:3001"
     depends_on:
       - api
 
 volumes:
   postgres_data:
 ```
+
+> **Note:** Docker runs on ports `3002` (API) and `3003` (web) on the host. Ports `3000` and `3001` are reserved for the HTTPS reverse proxy set up in Part 3. This avoids any port conflict when adding HTTPS later.
 
 ### Step 3 — Create `.env`
 
@@ -106,8 +107,8 @@ IMAGES_PATH=/volume1/docker/home-inventory/images
 | `API_TOKEN` | Yes | — | Token required by the mobile app and web UI to access the API |
 | `SERVER_NAME` | No | `Home Inventory` | Display name shown in the mobile app Settings screen |
 | `IMAGES_PATH` | No | `/volume1/docker/home-inventory/images` | Host path where item photos are stored |
-| `API_PORT` | No | `3000` | External port for the API (change to `13000` when adding HTTPS — see Part 3) |
-| `WEB_PORT` | No | `3001` | External port for the web UI (change to `13001` when adding HTTPS — see Part 3) |
+| `API_PORT` | No | `3002` | Host port for the API container |
+| `WEB_PORT` | No | `3003` | Host port for the web container |
 
 ### Step 4 — Start via Container Manager
 
@@ -121,8 +122,8 @@ IMAGES_PATH=/volume1/docker/home-inventory/images
 
 Open a browser and navigate to:
 
-- `http://<nas-local-ip>:3001` — the web UI should load
-- `http://<nas-local-ip>:3000/api/health` — should return `{"status":"ok"}`
+- `http://<nas-local-ip>:3003` — the web UI should load
+- `http://<nas-local-ip>:3002/api/health` — should return `{"status":"ok"}`
 
 Find your NAS local IP in DSM → **Control Panel** → **Network**.
 
@@ -131,21 +132,21 @@ Find your NAS local IP in DSM → **Control Panel** → **Network**.
 ## Part 2 — Connect the mobile app (local network)
 
 1. Open the Home Inventory app → **Settings** tab
-2. Enter the **Server URL**: `http://<nas-local-ip>:3000`
+2. Enter the **Server URL**: `http://<nas-local-ip>:3002`
 3. Enter the **Token**: the `API_TOKEN` value from your `.env` file
 4. Tap **Test & Save** — it should show "Connected" and your server name
 
-This works on your home Wi-Fi. For remote access, continue to Part 3.
+This works on your home Wi-Fi. For remote access over HTTPS, continue to Part 3.
 
 ---
 
-## Part 3 — HTTPS with Tailscale (remote access + App Store build)
+## Part 3 — HTTPS setup (remote access + App Store build)
 
 HTTPS is required to:
-- Use the app from anywhere via Tailscale (not just home Wi-Fi)
+- Access the app securely from anywhere, not just home Wi-Fi
 - Run an App Store distribution build of the iOS app (Apple blocks plain HTTP connections)
 
-This setup uses a free Synology DDNS hostname to obtain a trusted Let's Encrypt certificate, then routes Tailscale traffic to the NAS without exposing any ports to the public internet.
+This setup adds an HTTPS reverse proxy in front of the Docker containers using a free Synology DDNS hostname and a Let's Encrypt certificate.
 
 ### Step 1 — Register a Synology DDNS hostname and get a certificate
 
@@ -158,25 +159,9 @@ This setup uses a free Synology DDNS hostname to obtain a trusted Let's Encrypt 
 3. Tick **Get a certificate from Let's Encrypt and set it as default**
 4. Click **Test Connection** to confirm the hostname is available, then click **OK**
 
-DSM registers the hostname and obtains a Let's Encrypt certificate in one step. The certificate is valid for 90 days and renews automatically. **You do not need to open any ports on your router** — Synology handles the ACME challenge through their own servers.
+DSM registers the hostname and obtains a Let's Encrypt certificate in one step. The certificate is valid for 90 days and renews automatically. **You do not need to open any ports on your router for this step** — Synology handles the ACME challenge through their own servers.
 
-### Step 3 — Move Docker to internal ports
-
-The DSM reverse proxy needs to own ports 3000 and 3001. Move the Docker containers to internal-only ports by adding two lines to your `.env` file:
-
-```
-API_PORT=13000
-WEB_PORT=13001
-```
-
-Then restart the project in Container Manager:
-**Container Manager → Project → home-inventory → Action → Restart**
-
-The containers now bind on ports 13000/13001 internally. Nothing external can reach them directly — the reverse proxy handles all incoming traffic.
-
-> **Important:** Complete this step and confirm the containers have restarted before moving to Step 4. If Docker is still on ports 3000/3001, DSM will refuse to save the reverse proxy rules with those ports.
-
-### Step 4 — Create DSM Reverse Proxy rules
+### Step 2 — Create DSM Reverse Proxy rules
 
 DSM → **Control Panel** → **Login Portal** → **Advanced** tab → **Reverse Proxy** → **Create**
 
@@ -190,7 +175,7 @@ DSM → **Control Panel** → **Login Portal** → **Advanced** tab → **Revers
 | Source Port | `3000` |
 | Destination Protocol | HTTP |
 | Destination Hostname | `localhost` |
-| Destination Port | `13000` |
+| Destination Port | `3002` |
 
 **Rule 2 — Web**
 
@@ -202,11 +187,11 @@ DSM → **Control Panel** → **Login Portal** → **Advanced** tab → **Revers
 | Source Port | `3001` |
 | Destination Protocol | HTTP |
 | Destination Hostname | `localhost` |
-| Destination Port | `13001` |
+| Destination Port | `3003` |
 
 The Let's Encrypt certificate you obtained in Step 1 was set as the DSM default, so it is applied automatically to all HTTPS reverse proxy rules — no further certificate configuration is needed.
 
-### Step 5 — Open DSM firewall ports (optional)
+### Step 3 — Open DSM firewall ports (optional)
 
 If you have the DSM firewall enabled, add **Allow** rules for TCP ports **3000** and **3001**:
 
@@ -216,27 +201,28 @@ To restrict access to Tailscale devices only, set the source IP range to `100.64
 
 If the DSM firewall is not enabled, skip this step — the setup works without it.
 
-### Step 6 — Add a Tailscale DNS override
+### Step 4 — Enable remote access
 
-This makes your `synology.me` domain resolve to the NAS's Tailscale IP for all devices in your tailnet — so the app can reach it from anywhere without port forwarding.
+The reverse proxy is now serving HTTPS on ports 3000 and 3001, but `my-inventory.synology.me` resolves to your home router's public IP. To reach it from outside your home network, forward those ports on your router to the NAS.
 
-1. Open [https://login.tailscale.com/admin/dns](https://login.tailscale.com/admin/dns)
-2. Scroll to **Extra Records** → click **Add**
-3. Fill in:
-   - **Name**: `my-inventory.synology.me`
-   - **Type**: `A`
-   - **Value**: your NAS's Tailscale IP (find it in Tailscale admin → **Machines**)
-4. Click **Save**
+On your home router, add two port forwarding rules:
 
-All Tailscale-connected devices now resolve `my-inventory.synology.me` to the NAS directly, without going through the public internet.
+| External Port | Internal IP | Internal Port | Protocol |
+|---|---|---|---|
+| 3000 | `<nas-local-ip>` | 3000 | TCP |
+| 3001 | `<nas-local-ip>` | 3001 | TCP |
 
-### Step 7 — Update app Settings
+> The exact steps vary by router — look for "Port Forwarding", "Virtual Server", or "NAT" in your router's admin panel.
+
+Once forwarded, `https://my-inventory.synology.me:3000` is accessible from anywhere. The API token protects all endpoints.
+
+### Step 5 — Update app Settings
 
 1. Open the Home Inventory app → **Settings** tab
 2. Change the **Server URL** to: `https://my-inventory.synology.me:3000`
 3. Tap **Test & Save** — should show "Connected"
 
-The app now communicates over HTTPS from anywhere your Tailscale is connected.
+The app now communicates over HTTPS from anywhere.
 
 ---
 
@@ -252,23 +238,18 @@ Container Manager fetches the latest image versions and restarts the containers 
 
 Automatic — DSM renews the Let's Encrypt certificate before it expires. No action needed.
 
-### Tailscale IP change
-
-Tailscale IPs are stable and don't change unless you remove and re-add the machine to your tailnet. If the IP does change, update the Extra Record value in the [Tailscale admin DNS settings](https://login.tailscale.com/admin/dns).
-
 ---
 
 ## Troubleshooting
 
 **"Connection failed" in app Settings**
 - Confirm the containers are running: Container Manager → Project → check all three containers show green
-- Test `https://my-inventory.synology.me:3000/api/health` in a browser on a Tailscale-connected device
-- Check the Tailscale DNS Extra Record is saved correctly and points to the right IP
+- Test `https://my-inventory.synology.me:3000/api/health` in a browser
+- Confirm port forwarding is set up correctly on your router
 
 **Web UI blank or "502 Bad Gateway"**
-- The reverse proxy rule may be pointing to the wrong port — confirm the destination is `13000` (API) or `13001` (Web), not the old `3000`/`3001`
+- The reverse proxy rule destination port may be wrong — confirm it points to `3002` (API) or `3003` (Web)
 - Restart the project in Container Manager and wait 30 seconds for the health check to pass
 
 **Certificate error in browser**
-- The cert is issued for `my-inventory.synology.me` — make sure you're accessing the site via that hostname, not an IP address
-- Check the cert is assigned to the reverse proxy rules (Step 4, Edit → Certificate)
+- The cert is issued for `my-inventory.synology.me` — make sure you're accessing the site via that hostname, not a local IP address
