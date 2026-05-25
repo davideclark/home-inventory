@@ -253,3 +253,7 @@ Automatic — DSM renews the Let's Encrypt certificate before it expires. No act
 
 **Certificate error in browser**
 - The cert is issued for `my-inventory.synology.me` — make sure you're accessing the site via that hostname, not a local IP address
+
+**Tailscale showing NAS as disconnected**
+- On the NAS: DSM → **Package Center** → **Installed** → **Tailscale** → **Stop** → **Start**
+- On the phone: open the Tailscale app and toggle the connection off and back on
