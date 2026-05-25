@@ -84,9 +84,23 @@ In the same folder, create a file named `.env`:
 POSTGRES_PASSWORD=choose_a_strong_password
 API_TOKEN=choose_a_secret_token
 SERVER_NAME=My Home Inventory
+IMAGES_PATH=/volume1/docker/home-inventory/images
 ```
 
 > **Tip:** `API_TOKEN` is what the mobile app and web UI use to authenticate with the API. Choose something long and random — treat it like a password.
+
+> **Images:** `IMAGES_PATH` is the folder on your NAS where item photos are stored. The folder is created automatically if it doesn't exist. If you change this path later, move the existing images folder to the new location before restarting.
+
+### Environment variable reference
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `POSTGRES_PASSWORD` | Yes | — | PostgreSQL database password |
+| `API_TOKEN` | Yes | — | Token required by the mobile app and web UI to access the API |
+| `SERVER_NAME` | No | `Home Inventory` | Display name shown in the mobile app Settings screen |
+| `IMAGES_PATH` | No | `/volume1/docker/home-inventory/images` | Host path where item photos are stored |
+| `API_PORT` | No | `3000` | External port for the API (change to `13000` when adding HTTPS — see Part 3) |
+| `WEB_PORT` | No | `3001` | External port for the web UI (change to `13001` when adding HTTPS — see Part 3) |
 
 ### Step 4 — Start via Container Manager
 
