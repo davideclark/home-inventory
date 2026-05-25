@@ -174,6 +174,8 @@ Then restart the project in Container Manager:
 
 The containers now bind on ports 13000/13001 internally. Nothing external can reach them directly — the reverse proxy handles all incoming traffic.
 
+> **Important:** Complete this step and confirm the containers have restarted before moving to Step 4. If Docker is still on ports 3000/3001, DSM will refuse to save the reverse proxy rules with those ports.
+
 ### Step 4 — Create DSM Reverse Proxy rules
 
 DSM → **Control Panel** → **Login Portal** → **Advanced** tab → **Reverse Proxy** → **Create**
@@ -202,7 +204,7 @@ DSM → **Control Panel** → **Login Portal** → **Advanced** tab → **Revers
 | Destination Hostname | `localhost` |
 | Destination Port | `13001` |
 
-For each rule, click **Edit** after saving and set the **Certificate** to `my-inventory.synology.me`.
+The Let's Encrypt certificate you obtained in Step 1 was set as the DSM default, so it is applied automatically to all HTTPS reverse proxy rules — no further certificate configuration is needed.
 
 ### Step 5 — Open DSM firewall ports
 
