@@ -15,12 +15,19 @@ A complete guide for deploying the Home Inventory app on a Synology NAS, includi
 
 ## Part 1 — Deploy the app
 
-### Step 1 — Create a folder for the app
+### Step 1 — Create folders for the app
 
-Open **File Station** and create a folder for the app, e.g.:
+Open **File Station** and create two folders:
 
 ```
 /volume1/docker/home-inventory/
+/volume1/docker/home-inventory/images/
+```
+
+The `images` folder is where item photos are stored. You can create it in File Station by navigating into `home-inventory` and clicking **Create → Create folder**, or via SSH:
+
+```bash
+mkdir -p /volume1/docker/home-inventory/images
 ```
 
 ### Step 2 — Create `docker-compose.yml`
@@ -89,7 +96,7 @@ IMAGES_PATH=/volume1/docker/home-inventory/images
 
 > **Tip:** `API_TOKEN` is what the mobile app and web UI use to authenticate with the API. Choose something long and random — treat it like a password.
 
-> **Images:** `IMAGES_PATH` is the folder on your NAS where item photos are stored. The folder is created automatically if it doesn't exist. If you change this path later, move the existing images folder to the new location before restarting.
+> **Images:** `IMAGES_PATH` is the folder on your NAS where item photos are stored (created in Step 1). If you change this path later, move the existing images folder to the new location before restarting.
 
 ### Environment variable reference
 
