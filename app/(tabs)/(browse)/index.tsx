@@ -1,11 +1,11 @@
 import { FlatList, View, StyleSheet, Pressable } from 'react-native';
-import { Text } from '../../components/Text';
+import { Text } from '../../../components/Text';
 import { router } from 'expo-router';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { eq, isNull, and, isNotNull } from 'drizzle-orm';
 import { useMemo } from 'react';
-import { db } from '../../db';
-import { item, catalogue } from '../../schema';
+import { db } from '../../../db';
+import { item, catalogue } from '../../../schema';
 
 function naturalSort(a: string, b: string): number {
   const re = /(\d+)/g;

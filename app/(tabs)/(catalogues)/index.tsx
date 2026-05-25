@@ -1,15 +1,15 @@
 import { FlatList, View, StyleSheet, Pressable, Alert } from 'react-native';
-import { Text } from '../../components/Text';
+import { Text } from '../../../components/Text';
 import { useRef } from 'react';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { asc, eq } from 'drizzle-orm';
 import { router } from 'expo-router';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
-import { db } from '../../db';
-import { catalogue, item } from '../../schema';
-import type { Catalogue } from '../../schema';
-import { deleteCatalogue } from '../../sync';
-import CatalogueIcon from '../../components/CatalogueIcon';
+import { db } from '../../../db';
+import { catalogue, item } from '../../../schema';
+import type { Catalogue } from '../../../schema';
+import { deleteCatalogue } from '../../../sync';
+import CatalogueIcon from '../../../components/CatalogueIcon';
 
 export default function CataloguesScreen() {
   const { data: catalogues } = useLiveQuery(

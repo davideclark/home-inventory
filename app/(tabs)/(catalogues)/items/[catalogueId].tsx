@@ -1,14 +1,14 @@
 import { FlatList, View, StyleSheet, Pressable, Alert } from 'react-native';
-import { Text } from '../../components/Text';
+import { Text } from '../../../../components/Text';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
 import { useRef, useMemo } from 'react';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { asc, eq, isNotNull } from 'drizzle-orm';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
-import { db } from '../../db';
-import { catalogue, item } from '../../schema';
-import type { Item } from '../../schema';
-import { deleteItem } from '../../sync';
+import { db } from '../../../../db';
+import { catalogue, item } from '../../../../schema';
+import type { Item } from '../../../../schema';
+import { deleteItem } from '../../../../sync';
 
 type FieldDef = { key: string; label: string; type: string; showInList?: boolean };
 
@@ -179,7 +179,7 @@ function ItemRow({ item: i, containerMap, showInListFields, hasChildren }: { ite
         {hasChildren && (
           <Pressable
             style={styles.browseButton}
-            onPress={() => router.push({ pathname: '/container/[itemId]', params: { itemId: i.id } })}
+            onPress={() => router.push({ pathname: '/catalogue-container/[itemId]', params: { itemId: i.id } })}
             hitSlop={8}
           >
             <Text style={styles.browseButtonText}>Browse Contents ›</Text>

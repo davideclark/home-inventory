@@ -42,8 +42,6 @@ export default function RootLayout() {
         <Stack.Screen name="new-item" options={{ title: 'Add Item', presentation: 'modal' }} />
         <Stack.Screen name="edit-item" options={{ title: 'Edit Item', presentation: 'modal' }} />
         <Stack.Screen name="item-detail" options={{ presentation: 'modal' }} />
-        <Stack.Screen name="items/[catalogueId]" options={{ title: 'Items' }} />
-        <Stack.Screen name="container/[itemId]" options={{ title: 'Container' }} />
       </Stack>
     </GestureHandlerRootView>
   );

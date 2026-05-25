@@ -1,14 +1,14 @@
 import { FlatList, View, StyleSheet, Pressable, Alert, SectionList } from 'react-native';
-import { Text } from '../../components/Text';
+import { Text } from './Text';
 import { useLocalSearchParams, router, Stack, useNavigation } from 'expo-router';
 import { useRef, useMemo, useEffect } from 'react';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { eq, isNotNull } from 'drizzle-orm';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
-import { db } from '../../db';
-import { item, catalogue } from '../../schema';
-import { deleteItem, deleteContainer } from '../../sync';
-import CatalogueIcon from '../../components/CatalogueIcon';
+import { db } from '../db';
+import { item, catalogue } from '../schema';
+import { deleteItem, deleteContainer } from '../sync';
+import CatalogueIcon from './CatalogueIcon';
 
 type FieldDef = { key: string; label: string; type: string; showInList?: boolean };
 
@@ -48,7 +48,7 @@ function buildPath(parentId: string | null | undefined, map: ContainerMap): stri
 // Shared across all ContainerScreen instances — records when any container was legitimately popped
 let lastContainerPopAt = 0;
 
-export default function ContainerScreen() {
+export default function ContainerScreen({ containerRoute }: { containerRoute: string }) {
   const { itemId } = useLocalSearchParams<{ itemId: string }>();
   const navigation = useNavigation();
   const blurredAt = useRef(0);
@@ -229,7 +229,7 @@ export default function ContainerScreen() {
           )}
           renderItem={({ item: child }) => (
             child.canContain
-              ? <ContainerRow child={child} containerMap={containerMap} cataloguesByContainer={cataloguesByContainer} hasChildren={parentIdSet.has(child.id)} />
+              ? <ContainerRow child={child} containerMap={containerMap} cataloguesByContainer={cataloguesByContainer} hasChildren={parentIdSet.has(child.id)} containerRoute={containerRoute} />
               : <ItemRow child={child} containerMap={containerMap} />
           )}
           SectionSeparatorComponent={() => <View style={styles.sectionSep} />}
@@ -253,7 +253,7 @@ type Child = {
   catalogueFields: string | null;
 };
 
-function ContainerRow({ child: c, containerMap, cataloguesByContainer, hasChildren }: { child: Child; containerMap: ContainerMap; cataloguesByContainer: Map<string, string[]>; hasChildren: boolean }) {
+function ContainerRow({ child: c, containerMap, cataloguesByContainer, hasChildren, containerRoute }: { child: Child; containerMap: ContainerMap; cataloguesByContainer: Map<string, string[]>; hasChildren: boolean; containerRoute: string }) {
   const swipeRef = useRef<Swipeable>(null);
 
   function renderRightActions() {
@@ -327,7 +327,7 @@ function ContainerRow({ child: c, containerMap, cataloguesByContainer, hasChildr
         {hasChildren && (
           <Pressable
             style={styles.browseButton}
-            onPress={() => router.push({ pathname: '/container/[itemId]', params: { itemId: c.id } })}
+            onPress={() => router.push({ pathname: containerRoute as any, params: { itemId: c.id } })}
             hitSlop={8}
           >
             <Text style={styles.browseButtonText}>Browse Contents ›</Text>
