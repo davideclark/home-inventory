@@ -206,11 +206,15 @@ DSM → **Control Panel** → **Login Portal** → **Advanced** tab → **Revers
 
 The Let's Encrypt certificate you obtained in Step 1 was set as the DSM default, so it is applied automatically to all HTTPS reverse proxy rules — no further certificate configuration is needed.
 
-### Step 5 — Open DSM firewall ports
+### Step 5 — Open DSM firewall ports (optional)
 
-DSM → **Control Panel** → **Security** → **Firewall**
+If you have the DSM firewall enabled, add **Allow** rules for TCP ports **3000** and **3001**:
 
-Add **Allow** rules for TCP ports **3000** and **3001**. If you want to restrict access to Tailscale devices only, set the source IP range to `100.64.0.0/10`.
+DSM → **Control Panel** → **Security** → **Firewall** → **Edit Rules** → **Create**
+
+To restrict access to Tailscale devices only, set the source IP range to `100.64.0.0/10`.
+
+If the DSM firewall is not enabled, skip this step — the setup works without it.
 
 ### Step 6 — Add a Tailscale DNS override
 
