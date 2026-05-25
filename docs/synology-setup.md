@@ -147,23 +147,18 @@ HTTPS is required to:
 
 This setup uses a free Synology DDNS hostname to obtain a trusted Let's Encrypt certificate, then routes Tailscale traffic to the NAS without exposing any ports to the public internet.
 
-### Step 1 — Register a Synology DDNS hostname
+### Step 1 — Register a Synology DDNS hostname and get a certificate
 
 1. DSM → **Control Panel** → **External Access** → **DDNS** tab → **Add**
-2. Service Provider: **Synology**
-3. Hostname: choose a name, e.g. `my-inventory` → your domain will be `my-inventory.synology.me`
-4. Leave External Address as the auto-detected value
-5. Click **Test Connection**, then **OK**
+2. Fill in the form:
+   - **Service Provider**: Synology
+   - **Hostname**: choose a name, e.g. `my-inventory` → your domain will be `my-inventory.synology.me`
+   - **Synology Account**: sign in if prompted
+   - **External Address**: leave as Auto (detected public IP)
+3. Tick **Get a certificate from Let's Encrypt and set it as default**
+4. Click **Test Connection** to confirm the hostname is available, then click **OK**
 
-### Step 2 — Get a Let's Encrypt certificate
-
-1. DSM → **Control Panel** → **Security** → **Certificate** tab → **Add**
-2. Choose **Get a certificate from Let's Encrypt**
-3. Domain name: `my-inventory.synology.me` (the hostname you chose above)
-4. Email: your email address (for expiry notices only)
-5. Click **Done**
-
-> DSM handles the ACME challenge through Synology's own servers — **you do not need to open port 80** on your router. The certificate is valid for 90 days and renews automatically.
+DSM registers the hostname and obtains a Let's Encrypt certificate in one step. The certificate is valid for 90 days and renews automatically. **You do not need to open any ports on your router** — Synology handles the ACME challenge through their own servers.
 
 ### Step 3 — Move Docker to internal ports
 
