@@ -92,6 +92,8 @@ The database is created and migrated automatically on first start.
 
 Access the web app at `http://<nas-ip>:3001`.
 
+For a complete step-by-step guide including HTTPS setup with Tailscale, see [docs/synology-setup.md](docs/synology-setup.md).
+
 ---
 
 ## Configuration

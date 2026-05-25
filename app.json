@@ -16,13 +16,25 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.davidclark.homeinventory",
+      "privacyManifests": {
+        "NSPrivacyAccessedAPITypes": [
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryFileTimestamp",
+            "NSPrivacyAccessedAPITypeReasons": ["C617.1"]
+          },
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryUserDefaults",
+            "NSPrivacyAccessedAPITypeReasons": ["CA92.1"]
+          }
+        ]
+      },
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
         },
-        "NSPhotoLibraryUsageDescription": "Choose a photo for this item.",
-        "NSCameraUsageDescription": "Take a photo for this item."
+        "NSPhotoLibraryUsageDescription": "Choose a photo from your library to attach to an inventory item. Photos are stored on your device and your personal server only.",
+        "NSCameraUsageDescription": "Take a photo to attach to an inventory item. Photos are stored on your device and your personal server only."
       }
     },
     "android": {
