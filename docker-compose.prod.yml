@@ -39,6 +39,8 @@ services:
     environment:
       API_URL: http://api:3000
       API_TOKEN: ${API_TOKEN:-}
+      WEB_PASSWORD: ${WEB_PASSWORD:-}
+      SESSION_SECRET: ${SESSION_SECRET:-}
     ports:
       - "${WEB_PORT:-3001}:3001"
     depends_on:

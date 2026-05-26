@@ -41,7 +41,8 @@ Requirements and data model are documented in Notion (for reference only):
 - **Pages**: Catalogues, Items per catalogue, Browse (hierarchy), Search, Settings
 - **Fonts**: Manrope via `next/font/google` (self-hosted, CSS variable `--font-sans`), applied via `font-sans` Tailwind class
 - **Design system**: primary colour `#007AFF` as `bg-primary` / `hover:bg-primary-hover` / `active:bg-primary-active` in `tailwind.config.ts`; House-Box logo at `public/logo-mark.svg`
-- **Config**: `API_URL` and `API_TOKEN` env vars — set via Docker Compose in prod, `.env.local` in dev
+- **Config**: `API_URL`, `API_TOKEN`, `WEB_PASSWORD`, `SESSION_SECRET` env vars — set via Docker Compose in prod, `.env.local` in dev
+- **Auth**: `web/middleware.ts` protects all routes except `/login` and `/api/auth/*`. Cookie `home-inventory-auth` set on login (httpOnly, secure, 30-day max-age). `WEB_PASSWORD` is the login password; `SESSION_SECRET` is the cookie value (generate with `openssl rand -hex 32`). Routes: `web/app/api/auth/login/route.ts`, `web/app/api/auth/logout/route.ts`.
 - **Production**: port 3001 — `http://192.168.1.201:3001` (local) or `http://100.110.8.60:3001` (Tailscale)
 - **Docker image**: `davideclark/home-inventory-web:latest` — multi-platform (amd64, arm64)
 

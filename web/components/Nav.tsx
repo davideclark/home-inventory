@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import Image from 'next/image';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 
 const links = [
   { href: '/catalogues', label: 'Catalogues' },
@@ -12,6 +12,15 @@ const links = [
 
 export default function Nav() {
   const path = usePathname();
+  const router = useRouter();
+
+  if (path === '/login') return null;
+
+  async function handleSignOut() {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    router.push('/login');
+  }
+
   return (
     <nav className="bg-primary text-white px-6 py-3 flex items-center gap-2">
       <Link href="/catalogues" className="flex items-center gap-2 font-semibold text-base mr-4 hover:opacity-90 transition-opacity">
@@ -29,6 +38,12 @@ export default function Nav() {
           {l.label}
         </Link>
       ))}
+      <button
+        onClick={handleSignOut}
+        className="ml-auto text-sm font-medium px-3 py-1.5 rounded transition-colors hover:bg-white/15"
+      >
+        Sign out
+      </button>
     </nav>
   );
 }
