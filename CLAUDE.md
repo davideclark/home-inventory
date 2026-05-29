@@ -184,10 +184,13 @@ sync.ts                    Sync logic: getDeviceId(), sync(), push(), pull()
                            Exports deleteItem(id), deleteCatalogue(id), deleteContainer(id) —
                            always use these instead of db.delete() to ensure tombstones are created.
                            Reads api_url, jwt_token, jwt_expires_at, refresh_token from settings table.
-                           Sends Authorization: Bearer <jwt> on all requests; falls back to X-API-Token
-                           if no JWT (legacy dev path, unused in production).
+                           Sends Authorization: Bearer <jwt> on all requests.
                            Refreshes JWT automatically before sync if within 1 min of expiry.
                            Exports storeAuthTokens(), clearAuthTokens(), checkStartupAuth().
+                           sync() returns early (no error) if no server configured; throws
+                           "Sign in via Settings to sync" if server configured but no JWT.
+                           refreshJwt() clears tokens on 401/403 (revoked); preserves them on
+                           network error so offline access still works.
                            Push-then-pull, last-write-wins on last_modified.
                            Cleans up orphaned items before push.
 db.ts                      Drizzle db instance (expo-sqlite)
@@ -285,7 +288,7 @@ All mutable tables carry `device_id`, `last_modified`, and `synced` for offline-
 
 **Protocol**: push-then-pull on demand (startup + manual ↻ button).
 
-**Auth**: sync requests include `Authorization: Bearer <jwt>` when a JWT is stored; falls back to `X-API-Token: <token>` if no JWT (legacy/dev). JWT is obtained via the login screen (`app/login.tsx`) and stored in the `settings` table (`jwt_token`, `jwt_expires_at`, `refresh_token`, `logged_in_username`). The JWT is refreshed automatically at sync time if within 1 minute of expiry. On startup (`_layout.tsx`), `checkStartupAuth()` is called — if no valid JWT and a server URL is configured, the app redirects to `/login`.
+**Auth**: the app is fully offline-first — no login is required to browse local data. Login is optional and only needed for sync and photo downloads. JWT is obtained via Settings → Sign In (`app/login.tsx`) and stored in the `settings` table (`jwt_token`, `jwt_expires_at`, `refresh_token`, `logged_in_username`). `_layout.tsx` runs a background sync on startup (silently, no redirect on failure). `refreshJwt()` distinguishes network errors (preserves credentials, allows offline access) from auth failures (401/403 — clears credentials). Sync requests include `Authorization: Bearer <jwt>`; if no JWT and server is configured, sync throws a user-friendly message instead of a raw 401.
 
 **Push**: selects all local records where `synced = false`, including `sync_tombstone` rows. Before pushing items, deletes any orphaned items whose `catalogue_id` no longer exists in the local catalogue table (prevents FK violations on the server). Sends unsynced catalogues, items, and tombstones in a single POST to `/api/sync/push`. On success, marks all pushed records `synced = true`.
 

@@ -1,4 +1,4 @@
-import { Stack, router } from 'expo-router';
+import { Stack } from 'expo-router';
 import { Text, View, StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useMigrations } from 'drizzle-orm/expo-sqlite/migrator';
@@ -6,21 +6,16 @@ import { useEffect } from 'react';
 import { useFonts, Manrope_400Regular, Manrope_500Medium, Manrope_600SemiBold, Manrope_700Bold } from '@expo-google-fonts/manrope';
 import migrations from '../drizzle/migrations';
 import { db } from '../db';
-import { sync, checkStartupAuth } from '../sync';
+import { sync } from '../sync';
 
 export default function RootLayout() {
   const { success, error } = useMigrations(db, migrations);
   const [fontsLoaded] = useFonts({ Manrope_400Regular, Manrope_500Medium, Manrope_600SemiBold, Manrope_700Bold });
 
+  // Background sync on startup — fails silently if not logged in or offline
   useEffect(() => {
     if (!success) return;
-    checkStartupAuth().then(ok => {
-      if (!ok) {
-        router.replace('/login');
-      } else {
-        sync().catch(() => {});
-      }
-    });
+    sync().catch(() => {});
   }, [success]);
 
   if (error) {
@@ -42,7 +37,7 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={styles.flex}>
       <Stack>
-        <Stack.Screen name="login" options={{ headerShown: false, gestureEnabled: false }} />
+        <Stack.Screen name="login" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false, headerBackTitle: '' }} />
         <Stack.Screen name="setup" options={{ headerShown: false }} />
         <Stack.Screen name="catalogue/add" options={{ title: 'Add Catalogue', presentation: 'modal' }} />

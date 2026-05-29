@@ -75,7 +75,7 @@ export default function SettingsScreen() {
     }
     await clearAuthTokens();
     clearApiConfigCache();
-    router.replace('/login');
+    setUsername('');
   }
 
   async function removeOrphanedContainers() {
@@ -152,9 +152,14 @@ export default function SettingsScreen() {
         <Text style={styles.usernameText}>{username || '—'}</Text>
       </View>
 
-      <Pressable style={styles.signOutButton} onPress={signOut}>
-        <Text style={styles.signOutText}>Sign Out</Text>
-      </Pressable>
+      {username
+        ? <Pressable style={styles.signOutButton} onPress={signOut}>
+            <Text style={styles.signOutText}>Sign Out</Text>
+          </Pressable>
+        : <Pressable style={styles.signInButton} onPress={() => router.push('/login')}>
+            <Text style={styles.signInText}>Sign In</Text>
+          </Pressable>
+      }
 
       <Text style={[styles.sectionHeader, styles.maintenanceHeader]}>MAINTENANCE</Text>
       <Pressable
@@ -187,8 +192,10 @@ const styles = StyleSheet.create({
   buttonDisabled:       { opacity: 0.6 },
   buttonText:           { color: '#fff', fontSize: 17, fontWeight: '600' },
   accountHeader:        { marginTop: 24 },
-  signOutButton:        { alignItems: 'center', paddingVertical: 12, marginBottom: 4 },
-  signOutText:          { color: '#ff3b30', fontSize: 16 },
+  signOutButton:        { backgroundColor: '#f2f2f7', borderRadius: 10, paddingVertical: 14, alignItems: 'center', marginBottom: 12, borderWidth: StyleSheet.hairlineWidth, borderColor: '#ccc' },
+  signOutText:          { color: '#ff3b30', fontSize: 17, fontWeight: '500' },
+  signInButton:         { backgroundColor: '#007AFF', borderRadius: 10, paddingVertical: 14, alignItems: 'center', marginBottom: 12 },
+  signInText:           { color: '#fff', fontSize: 17, fontWeight: '600' },
   maintenanceHeader:    { marginTop: 24 },
   maintenanceButton:    { backgroundColor: '#f2f2f7', borderRadius: 10, paddingVertical: 14, alignItems: 'center', marginBottom: 12, borderWidth: StyleSheet.hairlineWidth, borderColor: '#ccc' },
   maintenanceButtonText:{ color: '#333', fontSize: 16, fontWeight: '500' },

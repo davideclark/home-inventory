@@ -51,7 +51,7 @@ export default function LoginScreen() {
       await saveSetting('api_url', trimmedUrl);
       await storeAuthTokens(token, refreshToken, user.username);
       clearApiConfigCache();
-      router.replace('/(tabs)');
+      router.back();
     } catch {
       setError('Could not reach server. Check the URL.');
     } finally {
@@ -66,7 +66,7 @@ export default function LoginScreen() {
       automaticallyAdjustKeyboardInsets
     >
       <Text style={styles.title}>Home Inventory</Text>
-      <Text style={styles.subtitle}>Sign in to continue</Text>
+      <Text style={styles.subtitle}>Sign in to enable sync</Text>
 
       <View style={styles.card}>
         <Text style={styles.label}>Server URL</Text>
@@ -115,6 +115,10 @@ export default function LoginScreen() {
           ? <ActivityIndicator color="#fff" />
           : <Text style={styles.buttonText}>Sign In</Text>}
       </Pressable>
+
+      <Pressable style={styles.cancelButton} onPress={() => router.back()} disabled={loading}>
+        <Text style={styles.cancelText}>Cancel</Text>
+      </Pressable>
     </ScrollView>
   );
 }
@@ -128,7 +132,9 @@ const styles = StyleSheet.create({
   input:        { fontSize: 16, color: '#111', paddingVertical: 8 },
   divider:      { height: StyleSheet.hairlineWidth, backgroundColor: '#e0e0e0' },
   errorText:    { color: '#ff3b30', fontSize: 14, marginBottom: 12, marginLeft: 4 },
-  button:       { backgroundColor: '#007AFF', borderRadius: 10, paddingVertical: 14, alignItems: 'center' },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText:   { color: '#fff', fontSize: 17, fontWeight: '600' },
+  button:        { backgroundColor: '#007AFF', borderRadius: 10, paddingVertical: 14, alignItems: 'center' },
+  buttonDisabled:{ opacity: 0.6 },
+  buttonText:    { color: '#fff', fontSize: 17, fontWeight: '600' },
+  cancelButton:  { backgroundColor: '#f2f2f7', borderRadius: 10, paddingVertical: 14, alignItems: 'center', marginTop: 12, borderWidth: StyleSheet.hairlineWidth, borderColor: '#ccc' },
+  cancelText:    { color: '#333', fontSize: 17, fontWeight: '500' },
 });

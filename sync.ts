@@ -109,7 +109,12 @@ async function refreshJwt(): Promise<boolean> {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refreshToken }),
     });
-    if (!res.ok) return false;
+    if (res.status === 401 || res.status === 403) {
+      // Server explicitly rejected the token — session is invalidated, force re-login
+      await clearAuthTokens();
+      return false;
+    }
+    if (!res.ok) return false; // Other server error — leave credentials intact
     const { token } = await res.json();
     const newExpiresAt = Date.now() + 14 * 60 * 1000;
     await setSetting('jwt_token', token);
@@ -118,21 +123,31 @@ async function refreshJwt(): Promise<boolean> {
     _jwtExpiresAt = newExpiresAt;
     return true;
   } catch {
+    // Network error — leave credentials intact so offline access still works
     return false;
   }
 }
 
 export async function checkStartupAuth(): Promise<boolean> {
+  const storedUrl = await getSetting('api_url');
+  const hasServer = !!(storedUrl || process.env.EXPO_PUBLIC_API_URL);
+
+  if (!hasServer) return true; // Standalone mode — no auth needed
+
   const jwt = await getJwtToken();
-  if (!jwt) {
-    // No JWT — only require login if a server URL has been configured
-    const storedUrl = await getSetting('api_url');
-    const hasServer = !!(storedUrl || process.env.EXPO_PUBLIC_API_URL);
-    return !hasServer; // true = ok (no server = skip auth); false = needs login
-  }
   const expiresAt = await getJwtExpiresAt();
-  if (expiresAt && expiresAt - Date.now() > 60_000) return true;
-  return refreshJwt();
+
+  // JWT present and still valid — no network needed
+  if (jwt && expiresAt && expiresAt - Date.now() > 60_000) return true;
+
+  // JWT missing or expired — try to refresh
+  // refreshJwt() clears credentials on 401/403 (revoked), preserves them on network error
+  const refreshed = await refreshJwt();
+  if (refreshed) return true;
+
+  // Refresh failed — check if credentials were cleared (auth failure) or preserved (offline)
+  const refreshToken = await getSetting('refresh_token');
+  return !!refreshToken; // Has refresh token = offline with valid creds = allow access
 }
 
 async function ensureFreshJwt(): Promise<void> {
@@ -406,6 +421,12 @@ export async function getImageUrl(itemId: string): Promise<{ url: string; token:
 }
 
 export async function sync(): Promise<{ pushed: number; pulled: number }> {
+  const jwt = await getJwtToken();
+  if (!jwt) {
+    // No credentials — skip silently in standalone mode, prompt to sign in if server is configured
+    if (await isServerConfigured()) throw new Error('Sign in via Settings to sync');
+    return { pushed: 0, pulled: 0 };
+  }
   await ensureFreshJwt();
   const since = (await getLastSyncAt()) ?? '1970-01-01T00:00:00Z';
   const { pushed, pushedItemIds, pushedCatIds, pushedTombstoneIds } = await push();
