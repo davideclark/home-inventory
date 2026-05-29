@@ -28,7 +28,7 @@ Requirements and data model are documented in Notion (for reference only):
 ### Backend (server/)
 - **Framework**: Node.js + Hono
 - **Database**: PostgreSQL 16 via Drizzle ORM (`drizzle-orm/postgres-js`)
-- **Auth**: dual auth — `Authorization: Bearer <jwt>` (Phase 1+) or legacy `X-API-Token: <token>` header. Public endpoints: `/api/health`, `/api/discover`, `/api/auth/login`, `/api/auth/refresh`. JWT issued by `POST /api/auth/login`; 15min expiry; refresh via `POST /api/auth/refresh`. Admin user seeded on first startup from `ADMIN_USERNAME` / `ADMIN_PASSWORD` env vars. `JWT_SECRET` env var required for JWT auth.
+- **Auth**: `Authorization: Bearer <jwt>` only. Public endpoints: `/api/health`, `/api/discover`, `/api/auth/login`, `/api/auth/refresh`. JWT issued by `POST /api/auth/login`; 15min expiry; refresh via `POST /api/auth/refresh`. When `JWT_SECRET` is set, any request without a valid Bearer JWT is rejected; when `JWT_SECRET` is unset, all requests pass through (dev mode). Admin user seeded on first startup from `ADMIN_USERNAME` / `ADMIN_PASSWORD` env vars.
 - **MCP server**: `@modelcontextprotocol/sdk` — stdio transport, registered in `.claudecode.json` and in Claude Desktop (`%APPDATA%\Claude\claude_desktop_config.json`)
 - **Infrastructure**: Docker Compose — `docker-compose.yml` (NAS production, Synology picks it up automatically), `docker-compose.dev.yml` (local dev, builds from source)
 - **Production deployment**: Synology DS1621+ NAS — Tailscale IP `100.110.8.60`, API on port 3000, postgres on port 5433
@@ -41,7 +41,7 @@ Requirements and data model are documented in Notion (for reference only):
 - **Pages**: Catalogues, Items per catalogue, Browse (hierarchy), Search, Settings
 - **Fonts**: Manrope via `next/font/google` (self-hosted, CSS variable `--font-sans`), applied via `font-sans` Tailwind class
 - **Design system**: primary colour `#007AFF` as `bg-primary` / `hover:bg-primary-hover` / `active:bg-primary-active` in `tailwind.config.ts`; House-Box logo at `public/logo-mark.svg`
-- **Config**: `API_URL`, `API_TOKEN`, `JWT_SECRET` env vars — set via Docker Compose in prod, `.env.local` in dev
+- **Config**: `API_URL`, `JWT_SECRET` env vars — set via Docker Compose in prod, `.env.local` in dev
 - **Auth**: `web/middleware.ts` protects all routes except `/login` and `/api/auth/*`. On login, two cookies are set: `home-inventory-jwt` (httpOnly, 15min) and `home-inventory-refresh` (httpOnly, 30d). The middleware verifies the JWT via `jose`; if expired, silently refreshes using the refresh cookie before redirecting to `/login`. `forcePasswordChange=true` in the JWT payload redirects page requests to `/change-password`. If `JWT_SECRET` is not set, middleware allows all (dev mode). Routes: `web/app/api/auth/login/route.ts` (proxies to backend, sets cookies), `web/app/api/auth/logout/route.ts` (revokes refresh token, clears cookies), `web/app/change-password/page.tsx` (change-password form). Proxy at `web/app/api/proxy/[...path]/route.ts` reads `home-inventory-jwt` cookie and forwards as `Authorization: Bearer <jwt>`; falls back to `X-API-Token` if no JWT (dev).
 - **Production**: port 3001 — `http://192.168.1.201:3001` (local) or `http://100.110.8.60:3001` (Tailscale)
 - **Docker image**: `davideclark/home-inventory-web:latest` — multi-platform (amd64, arm64)
@@ -75,7 +75,6 @@ cd web && npx tsc --noEmit  # type-check
 **web/.env.local** (dev only, gitignored):
 ```
 API_URL=http://DS1621plus.local:3000
-API_TOKEN=ClarenceRoad
 ```
 
 **To rebuild and push the web Docker image:**
@@ -94,7 +93,6 @@ docker buildx build --platform linux/amd64 -t davideclark/home-inventory-web:lat
 ```
 DOCKERHUB_USERNAME=davideclark
 POSTGRES_PASSWORD=inventory_local
-API_TOKEN=<token>
 SERVER_NAME=David's Inventory
 IMAGES_PATH=/volume1/docker/home-inventory/images
 API_PORT=13000
@@ -186,7 +184,8 @@ sync.ts                    Sync logic: getDeviceId(), sync(), push(), pull()
                            Exports deleteItem(id), deleteCatalogue(id), deleteContainer(id) —
                            always use these instead of db.delete() to ensure tombstones are created.
                            Reads api_url, jwt_token, jwt_expires_at, refresh_token from settings table.
-                           Sends Authorization: Bearer <jwt> on all requests; falls back to X-API-Token if no JWT.
+                           Sends Authorization: Bearer <jwt> on all requests; falls back to X-API-Token
+                           if no JWT (legacy dev path, unused in production).
                            Refreshes JWT automatically before sync if within 1 min of expiry.
                            Exports storeAuthTokens(), clearAuthTokens(), checkStartupAuth().
                            Push-then-pull, last-write-wins on last_modified.
@@ -334,8 +333,8 @@ All mutable tables carry `device_id`, `last_modified`, and `synced` for offline-
 - Timestamps stored as ISO text strings in both mobile and server for lexicographic last-write-wins comparison. SQLite's `datetime('now')` default produces a non-ISO format — sync.ts normalises both formats via `toMs()` before comparing.
 - MCP server uses stdio transport — Claude Code spawns it as a local process via `.claudecode.json`. Also registered in Claude Desktop config. Restart the respective app after changing either config file. The MCP process is long-lived — if `mcp.ts` is changed mid-session, the running process still uses the old code; restart Claude Code to pick up changes.
 - `bulk_import` MCP tool does topological sort on items before inserting (parents before children).
-- `API_TOKEN` env var gates all endpoints except `/api/health` and `/api/discover`. If not set, auth is skipped (dev mode).
-- `/api/discover` returns `{ name, version, requiresToken }` — used by the app's Settings screen to identify and verify the server.
+- `JWT_SECRET` env var secures all endpoints except `/api/health`, `/api/discover`, `/api/auth/login`, `/api/auth/refresh`. If not set, auth is skipped (dev mode).
+- `/api/discover` returns `{ name, version, requiresToken }` — `requiresToken` is true when `JWT_SECRET` is set.
 - API runs migrations automatically on startup via `drizzle-orm/postgres-js/migrator`.
 - **Image endpoints**: `POST /api/items/:id/image` (upload), `GET /api/items/:id/image` (serve), `DELETE /api/items/:id/image` (remove). Files stored at `<IMAGE_PATH>/<id>.jpg`. `IMAGE_PATH` env var defaults to `./images`; in prod it is `/images` (mapped to Docker volume). All three are token-protected.
 - **Parent IDs endpoint**: `GET /api/items/parent-ids` returns a `string[]` of all distinct `parentId` values. Must be registered before `GET /api/items/:id` in the route order. Used by `web/app/catalogues/[id]/page.tsx` for the Browse Contents button. **`web/app/containers/page.tsx` and `web/app/containers/[id]/page.tsx` do NOT use this endpoint** — they compute `parentIdSet` locally from the `allLeafItems` query (queryKey: `['items-by-parent']`) which they already fetch for the catalogue-names subtitle. Do not revert this to the API endpoint approach — computing locally is more reliable and removes a network dependency.
