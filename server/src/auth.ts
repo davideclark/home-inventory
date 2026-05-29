@@ -30,17 +30,25 @@ export interface JwtPayload {
   forcePasswordChange: boolean;
 }
 
+const JWT_ISSUER   = 'home-inventory-api';
+const JWT_AUDIENCE = 'home-inventory';
+
 export async function signJwt(payload: JwtPayload): Promise<string> {
   return new SignJWT({ role: payload.role, forcePasswordChange: payload.forcePasswordChange })
     .setProtectedHeader({ alg: 'HS256' })
     .setSubject(payload.sub)
+    .setIssuer(JWT_ISSUER)
+    .setAudience(JWT_AUDIENCE)
     .setIssuedAt()
     .setExpirationTime('15m')
     .sign(jwtSecret());
 }
 
 export async function verifyJwt(token: string): Promise<JwtPayload> {
-  const { payload } = await jwtVerify(token, jwtSecret());
+  const { payload } = await jwtVerify(token, jwtSecret(), {
+    issuer: JWT_ISSUER,
+    audience: JWT_AUDIENCE,
+  });
   return {
     sub: payload.sub as string,
     role: payload['role'] as string,

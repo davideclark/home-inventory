@@ -23,7 +23,10 @@ export async function middleware(req: NextRequest) {
 
   if (jwt) {
     try {
-      const { payload } = await jwtVerify(jwt, jwtSecret());
+      const { payload } = await jwtVerify(jwt, jwtSecret(), {
+        issuer: 'home-inventory-api',
+        audience: 'home-inventory',
+      });
       // Force password change — redirect to /change-password for page requests only
       if (payload['forcePasswordChange'] && !pathname.startsWith('/api/') && pathname !== '/change-password') {
         const url = req.nextUrl.clone();
