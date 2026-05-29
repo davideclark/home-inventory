@@ -55,8 +55,10 @@ app.get('/api/discover', (c) => c.json({ name: SERVER_NAME, version: API_VERSION
 app.post('/api/auth/login', async (c) => {
   const { username, password } = await c.req.json();
   if (!username || !password) return c.json({ error: 'Username and password required' }, 400);
+  if (password.length > 256) return c.json({ error: 'Invalid credentials' }, 401);
 
-  const [user] = await db.select().from(users).where(eq(users.username, username)).limit(1);
+  const trimmedUsername = username.trim();
+  const [user] = await db.select().from(users).where(eq(users.username, trimmedUsername)).limit(1);
   if (!user || !(await verifyPassword(password, user.passwordHash))) {
     return c.json({ error: 'Invalid credentials' }, 401);
   }
