@@ -41,8 +41,8 @@ Requirements and data model are documented in Notion (for reference only):
 - **Pages**: Catalogues, Items per catalogue, Browse (hierarchy), Search, Settings
 - **Fonts**: Manrope via `next/font/google` (self-hosted, CSS variable `--font-sans`), applied via `font-sans` Tailwind class
 - **Design system**: primary colour `#007AFF` as `bg-primary` / `hover:bg-primary-hover` / `active:bg-primary-active` in `tailwind.config.ts`; House-Box logo at `public/logo-mark.svg`
-- **Config**: `API_URL`, `API_TOKEN`, `WEB_PASSWORD`, `SESSION_SECRET` env vars — set via Docker Compose in prod, `.env.local` in dev
-- **Auth**: `web/middleware.ts` protects all routes except `/login` and `/api/auth/*`. Cookie `home-inventory-auth` set on login (httpOnly, secure, 30-day max-age). `WEB_PASSWORD` is the login password; `SESSION_SECRET` is the cookie value (generate with `openssl rand -hex 32`). Routes: `web/app/api/auth/login/route.ts`, `web/app/api/auth/logout/route.ts`.
+- **Config**: `API_URL`, `API_TOKEN`, `JWT_SECRET` env vars — set via Docker Compose in prod, `.env.local` in dev
+- **Auth**: `web/middleware.ts` protects all routes except `/login` and `/api/auth/*`. On login, two cookies are set: `home-inventory-jwt` (httpOnly, 15min) and `home-inventory-refresh` (httpOnly, 30d). The middleware verifies the JWT via `jose`; if expired, silently refreshes using the refresh cookie before redirecting to `/login`. `forcePasswordChange=true` in the JWT payload redirects page requests to `/change-password`. If `JWT_SECRET` is not set, middleware allows all (dev mode). Routes: `web/app/api/auth/login/route.ts` (proxies to backend, sets cookies), `web/app/api/auth/logout/route.ts` (revokes refresh token, clears cookies), `web/app/change-password/page.tsx` (change-password form). Proxy at `web/app/api/proxy/[...path]/route.ts` reads `home-inventory-jwt` cookie and forwards as `Authorization: Bearer <jwt>`; falls back to `X-API-Token` if no JWT (dev).
 - **Production**: port 3001 — `http://192.168.1.201:3001` (local) or `http://100.110.8.60:3001` (Tailscale)
 - **Docker image**: `davideclark/home-inventory-web:latest` — multi-platform (amd64, arm64)
 
@@ -99,8 +99,6 @@ SERVER_NAME=David's Inventory
 IMAGES_PATH=/volume1/docker/home-inventory/images
 API_PORT=13000
 WEB_PORT=13001
-WEB_PASSWORD=<web login password>
-SESSION_SECRET=<openssl rand -hex 32>
 JWT_SECRET=<openssl rand -hex 32>
 ADMIN_USERNAME=<username>
 ADMIN_PASSWORD=<initial password — forced to change on first login>

@@ -14,7 +14,7 @@ export default function Nav() {
   const path = usePathname();
   const router = useRouter();
 
-  if (path === '/login') return null;
+  if (path === '/login' || path === '/change-password') return null;
 
   async function handleSignOut() {
     await fetch('/api/auth/logout', { method: 'POST' });

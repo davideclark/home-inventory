@@ -3,8 +3,6 @@ import { type NextRequest, NextResponse } from 'next/server';
 const API_URL   = process.env.API_URL   ?? 'http://localhost:3000';
 const API_TOKEN = process.env.API_TOKEN ?? '';
 
-const authHeader: HeadersInit = API_TOKEN ? { 'X-API-Token': API_TOKEN } : {};
-
 async function proxy(req: NextRequest, path: string[]): Promise<NextResponse> {
   const search = new URL(req.url).search;
   const target = `${API_URL}/api/${path.join('/')}${search}`;
@@ -16,7 +14,14 @@ async function proxy(req: NextRequest, path: string[]): Promise<NextResponse> {
     body = isMultipart ? await req.arrayBuffer() : await req.text();
   }
 
-  const headers: Record<string, string> = { ...authHeader as Record<string, string> };
+  // Prefer JWT from cookie, fall back to static API_TOKEN (dev)
+  const jwt = req.cookies.get('home-inventory-jwt')?.value;
+  const headers: Record<string, string> = jwt
+    ? { 'Authorization': `Bearer ${jwt}` }
+    : API_TOKEN
+    ? { 'X-API-Token': API_TOKEN }
+    : {};
+
   if (isMultipart) {
     headers['Content-Type'] = contentType;
   } else {
