@@ -1,14 +1,15 @@
 services:
   postgres:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_DB: home_inventory
       POSTGRES_USER: inventory
-      POSTGRES_PASSWORD: inventory_local
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-inventory_local}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5433}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U inventory -d home_inventory"]
       interval: 5s
@@ -16,15 +17,37 @@ services:
       retries: 5
 
   api:
-    build: ./server
+    image: ${DOCKERHUB_USERNAME}/home-inventory-api:latest
+    restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql://inventory:inventory_local@postgres:5432/home_inventory
+      DATABASE_URL: postgresql://inventory:${POSTGRES_PASSWORD:-inventory_local}@postgres:5432/home_inventory
       PORT: 3000
+      API_TOKEN: ${API_TOKEN:-}
+      SERVER_NAME: ${SERVER_NAME:-Home Inventory}
+      IMAGE_PATH: /images
+      JWT_SECRET: ${JWT_SECRET:-}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+    volumes:
+      - ${IMAGES_PATH:-/volume1/docker/home-inventory/images}:/images
     ports:
-      - "3000:3000"
+      - "${API_PORT:-3000}:3000"
     depends_on:
       postgres:
         condition: service_healthy
+
+  web:
+    image: ${DOCKERHUB_USERNAME}/home-inventory-web:latest
+    restart: unless-stopped
+    environment:
+      API_URL: http://api:3000
+      API_TOKEN: ${API_TOKEN:-}
+      WEB_PASSWORD: ${WEB_PASSWORD:-}
+      SESSION_SECRET: ${SESSION_SECRET:-}
+    ports:
+      - "${WEB_PORT:-3001}:3001"
+    depends_on:
+      - api
 
 volumes:
   postgres_data:

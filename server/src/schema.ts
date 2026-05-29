@@ -65,7 +65,27 @@ export const itemRelations = relations(item, ({ one, many }) => ({
   children: many(item, { relationName: 'parent_child' }),
 }));
 
+export const users = pgTable('users', {
+  id:                  uuid('id').primaryKey().defaultRandom(),
+  username:            text('username').notNull().unique(),
+  passwordHash:        text('password_hash').notNull(),
+  role:                text('role').notNull().default('member'),
+  forcePasswordChange: boolean('force_password_change').notNull().default(true),
+  createdAt:           text('created_at').notNull().default(sql`to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`),
+});
+
+export const refreshTokens = pgTable('refresh_tokens', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  userId:    uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  tokenHash: text('token_hash').notNull(),
+  expiresAt: text('expires_at').notNull(),
+  revoked:   boolean('revoked').notNull().default(false),
+  createdAt: text('created_at').notNull().default(sql`to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`),
+});
+
 export type Catalogue    = typeof catalogue.$inferSelect;
 export type NewCatalogue = typeof catalogue.$inferInsert;
 export type Item         = typeof item.$inferSelect;
 export type NewItem      = typeof item.$inferInsert;
+export type User         = typeof users.$inferSelect;
+export type NewUser      = typeof users.$inferInsert;

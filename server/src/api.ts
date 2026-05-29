@@ -1,33 +1,138 @@
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
-import { eq, gte, or, ilike, sql, isNotNull } from 'drizzle-orm';
+import { eq, gte, or, ilike, sql, isNotNull, count } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import { randomUUID } from 'crypto';
 import { readFileSync, writeFileSync, mkdirSync, existsSync, unlinkSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import JSZip from 'jszip';
 import { db } from './db';
-import { catalogue, item, syncTombstone, syncLog } from './schema';
+import { catalogue, item, syncTombstone, syncLog, users, refreshTokens } from './schema';
 import { version as API_VERSION } from '../package.json';
+import {
+  hashPassword, verifyPassword, signJwt, verifyJwt,
+  generateRefreshToken, hashRefreshToken,
+} from './auth';
 
 const API_TOKEN   = process.env.API_TOKEN   ?? '';
 const SERVER_NAME = process.env.SERVER_NAME ?? 'Home Inventory';
 const IMAGE_PATH  = process.env.IMAGE_PATH  ?? './images';
 
-const app = new Hono();
+type Variables = { userId: string; userRole: string };
+const app = new Hono<{ Variables: Variables }>();
 
-// Token auth — skip for /api/health and /api/discover
+// Auth middleware — dual: JWT Bearer OR legacy API_TOKEN
 app.use('/api/*', async (c, next) => {
-  if (API_TOKEN && c.req.path !== '/api/health' && c.req.path !== '/api/discover') {
-    if (c.req.header('X-API-Token') !== API_TOKEN) {
+  const path = c.req.path;
+  const publicPaths = ['/api/health', '/api/discover', '/api/auth/login', '/api/auth/refresh'];
+  if (publicPaths.includes(path)) return next();
+
+  // JWT Bearer
+  const authHeader = c.req.header('Authorization');
+  if (authHeader?.startsWith('Bearer ')) {
+    try {
+      const payload = await verifyJwt(authHeader.slice(7));
+      c.set('userId', payload.sub);
+      c.set('userRole', payload.role);
+      return next();
+    } catch {
       return c.json({ error: 'Unauthorized' }, 401);
     }
+  }
+
+  // Legacy API_TOKEN (mobile + dev mode)
+  if (API_TOKEN && c.req.header('X-API-Token') !== API_TOKEN) {
+    return c.json({ error: 'Unauthorized' }, 401);
   }
   return next();
 });
 
 app.get('/api/health',   (c) => c.json({ status: 'ok' }));
 app.get('/api/discover', (c) => c.json({ name: SERVER_NAME, version: API_VERSION, requiresToken: !!API_TOKEN }));
+
+// ── Auth ─────────────────────────────────────────────────────────────────────
+
+app.post('/api/auth/login', async (c) => {
+  const { username, password } = await c.req.json();
+  if (!username || !password) return c.json({ error: 'Username and password required' }, 400);
+
+  const [user] = await db.select().from(users).where(eq(users.username, username)).limit(1);
+  if (!user || !(await verifyPassword(password, user.passwordHash))) {
+    return c.json({ error: 'Invalid credentials' }, 401);
+  }
+
+  const token        = await signJwt({ sub: user.id, role: user.role, forcePasswordChange: user.forcePasswordChange });
+  const refreshToken = generateRefreshToken();
+  const expiresAt    = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+  await db.insert(refreshTokens).values({
+    id: randomUUID(), userId: user.id,
+    tokenHash: hashRefreshToken(refreshToken), expiresAt, revoked: false,
+  });
+
+  return c.json({
+    token, refreshToken,
+    user: { id: user.id, username: user.username, role: user.role, forcePasswordChange: user.forcePasswordChange },
+  });
+});
+
+app.post('/api/auth/refresh', async (c) => {
+  const { refreshToken } = await c.req.json();
+  if (!refreshToken) return c.json({ error: 'Refresh token required' }, 400);
+
+  const tokenHash = hashRefreshToken(refreshToken);
+  const [stored] = await db.select().from(refreshTokens).where(eq(refreshTokens.tokenHash, tokenHash)).limit(1);
+  if (!stored || stored.revoked || stored.expiresAt < new Date().toISOString()) {
+    return c.json({ error: 'Invalid or expired refresh token' }, 401);
+  }
+
+  const [user] = await db.select().from(users).where(eq(users.id, stored.userId)).limit(1);
+  if (!user) return c.json({ error: 'User not found' }, 401);
+
+  const token = await signJwt({ sub: user.id, role: user.role, forcePasswordChange: user.forcePasswordChange });
+  return c.json({ token });
+});
+
+app.post('/api/auth/logout', async (c) => {
+  const { refreshToken } = await c.req.json();
+  if (refreshToken) {
+    await db.update(refreshTokens)
+      .set({ revoked: true })
+      .where(eq(refreshTokens.tokenHash, hashRefreshToken(refreshToken)));
+  }
+  return c.json({ ok: true });
+});
+
+app.get('/api/auth/me', async (c) => {
+  const userId = c.get('userId');
+  if (!userId) return c.json({ error: 'Not authenticated with JWT' }, 401);
+
+  const [user] = await db.select({
+    id: users.id, username: users.username, role: users.role, forcePasswordChange: users.forcePasswordChange,
+  }).from(users).where(eq(users.id, userId)).limit(1);
+  if (!user) return c.json({ error: 'User not found' }, 404);
+  return c.json(user);
+});
+
+app.post('/api/auth/change-password', async (c) => {
+  const userId = c.get('userId');
+  if (!userId) return c.json({ error: 'Not authenticated with JWT' }, 401);
+
+  const { currentPassword, newPassword } = await c.req.json();
+  if (!currentPassword || !newPassword) return c.json({ error: 'currentPassword and newPassword required' }, 400);
+  if (newPassword.length < 8) return c.json({ error: 'Password must be at least 8 characters' }, 400);
+
+  const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+  if (!user || !(await verifyPassword(currentPassword, user.passwordHash))) {
+    return c.json({ error: 'Current password is incorrect' }, 401);
+  }
+
+  await db.update(users).set({
+    passwordHash: await hashPassword(newPassword),
+    forcePasswordChange: false,
+  }).where(eq(users.id, userId));
+
+  return c.json({ ok: true });
+});
 
 // ── Catalogues ──────────────────────────────────────────────────────────────
 
@@ -363,9 +468,26 @@ app.post('/api/sync/push', async (c) => {
   return c.json({ ok: true, catalogues: cats.length, items: its.length, tombstones: tombstonesIn.length, numbersCleared, skipped });
 });
 
+async function seedAdminUser() {
+  const [{ c }] = await db.select({ c: count() }).from(users);
+  if (c > 0) return;
+
+  const username = process.env.ADMIN_USERNAME ?? 'admin';
+  const password = process.env.ADMIN_PASSWORD ?? 'changeme';
+  await db.insert(users).values({
+    id: randomUUID(),
+    username,
+    passwordHash: await hashPassword(password),
+    role: 'admin',
+    forcePasswordChange: true,
+  });
+  console.log(`Created admin user: ${username} (force password change on first login)`);
+}
+
 async function main() {
   mkdirSync(IMAGE_PATH, { recursive: true });
   await migrate(db, { migrationsFolder: './drizzle' });
+  await seedAdminUser();
   const port = Number(process.env.PORT ?? 3000);
   serve({ fetch: app.fetch, port }, () => {
     console.log(`API listening on http://localhost:${port}`);

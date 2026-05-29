@@ -28,9 +28,9 @@ Requirements and data model are documented in Notion (for reference only):
 ### Backend (server/)
 - **Framework**: Node.js + Hono
 - **Database**: PostgreSQL 16 via Drizzle ORM (`drizzle-orm/postgres-js`)
-- **Auth**: `API_TOKEN` env var — all endpoints except `/api/health` and `/api/discover` require `X-API-Token` header
+- **Auth**: dual auth — `Authorization: Bearer <jwt>` (Phase 1+) or legacy `X-API-Token: <token>` header. Public endpoints: `/api/health`, `/api/discover`, `/api/auth/login`, `/api/auth/refresh`. JWT issued by `POST /api/auth/login`; 15min expiry; refresh via `POST /api/auth/refresh`. Admin user seeded on first startup from `ADMIN_USERNAME` / `ADMIN_PASSWORD` env vars. `JWT_SECRET` env var required for JWT auth.
 - **MCP server**: `@modelcontextprotocol/sdk` — stdio transport, registered in `.claudecode.json` and in Claude Desktop (`%APPDATA%\Claude\claude_desktop_config.json`)
-- **Infrastructure**: Docker Compose — `docker-compose.yml` (local dev), `docker-compose.prod.yml` (NAS production)
+- **Infrastructure**: Docker Compose — `docker-compose.yml` (NAS production, Synology picks it up automatically), `docker-compose.dev.yml` (local dev, builds from source)
 - **Production deployment**: Synology DS1621+ NAS — Tailscale IP `100.110.8.60`, API on port 3000, postgres on port 5433
 - **Docker image**: `davideclark/home-inventory-api:latest` — multi-platform (amd64, arm64, arm/v7)
 
@@ -97,8 +97,15 @@ POSTGRES_PASSWORD=inventory_local
 API_TOKEN=<token>
 SERVER_NAME=David's Inventory
 IMAGES_PATH=/volume1/docker/home-inventory/images
+API_PORT=13000
+WEB_PORT=13001
+WEB_PASSWORD=<web login password>
+SESSION_SECRET=<openssl rand -hex 32>
+JWT_SECRET=<openssl rand -hex 32>
+ADMIN_USERNAME=<username>
+ADMIN_PASSWORD=<initial password — forced to change on first login>
 ```
-`IMAGES_PATH` is the host path mounted into the API container at `/images`. The API reads `IMAGE_PATH=/images` (set in `docker-compose.prod.yml`). The directory is created automatically on startup if it doesn't exist.
+`IMAGES_PATH` is the host path mounted into the API container at `/images`. The API reads `IMAGE_PATH=/images` (set in `docker-compose.yml`). The directory is created automatically on startup if it doesn't exist.
 
 **To rebuild and push the Docker image** (run from repo root):
 ```bash
@@ -108,12 +115,12 @@ docker buildx build --platform linux/amd64 -t davideclark/home-inventory-api:lat
 
 **To deploy/update on NAS** (SSH on port 8888, user: david):
 ```bash
-ssh -p 8888 david@DS1621plus.local "cd /volume1/docker/home-inventory && sudo /usr/local/bin/docker compose -f docker-compose.prod.yml pull && sudo /usr/local/bin/docker compose -f docker-compose.prod.yml up -d"
+ssh -p 8888 david@DS1621plus.local "cd /volume1/docker/home-inventory && sudo /usr/local/bin/docker compose pull && sudo /usr/local/bin/docker compose up -d"
 ```
 
-**To copy updated docker-compose.prod.yml to NAS** (SCP doesn't work — use SSH pipe):
+**To copy updated docker-compose.yml to NAS** (SCP doesn't work — use SSH pipe):
 ```bash
-Get-Content docker-compose.prod.yml -Raw | ssh -p 8888 david@DS1621plus.local "cat > /volume1/docker/home-inventory/docker-compose.prod.yml"
+Get-Content docker-compose.yml -Raw | ssh -p 8888 david@DS1621plus.local "cat > /volume1/docker/home-inventory/docker-compose.yml"
 ```
 
 **Always use `npx expo install <pkg>` for Expo ecosystem packages** — it resolves SDK-compatible versions. `.npmrc` sets `legacy-peer-deps=true` project-wide to handle React peer dependency conflicts. For React itself, pin to `19.1.0`.
@@ -206,8 +213,8 @@ server/
   package.json
   Dockerfile               Builds REST API container
 
-docker-compose.yml         PostgreSQL + REST API containers (local dev)
-docker-compose.prod.yml    PostgreSQL + REST API + web containers (NAS production)
+docker-compose.yml         PostgreSQL + REST API + web containers (NAS production — Docker Hub images)
+docker-compose.dev.yml     PostgreSQL + API containers (local dev — builds from source)
 .claudecode.json           MCP servers: notion + inventory (gitignored — contains secrets)
 
 web/
