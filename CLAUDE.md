@@ -337,6 +337,7 @@ All mutable tables carry `device_id`, `last_modified`, and `synced` for offline-
 - MCP server uses stdio transport — Claude Code spawns it as a local process via `.claudecode.json`. Also registered in Claude Desktop config. Restart the respective app after changing either config file. The MCP process is long-lived — if `mcp.ts` is changed mid-session, the running process still uses the old code; restart Claude Code to pick up changes.
 - `bulk_import` MCP tool does topological sort on items before inserting (parents before children).
 - `JWT_SECRET` env var secures all endpoints except `/api/health`, `/api/discover`, `/api/auth/login`, `/api/auth/refresh`. If not set, auth is skipped (dev mode).
+- `POST /api/auth/login` rejects passwords over 256 characters before hashing (prevents DoS via slow scrypt on huge payloads) and trims the username before the DB lookup. The web login form also trims username before posting.
 - `/api/discover` returns `{ name, version, requiresToken }` — `requiresToken` is true when `JWT_SECRET` is set.
 - API runs migrations automatically on startup via `drizzle-orm/postgres-js/migrator`.
 - **Image endpoints**: `POST /api/items/:id/image` (upload), `GET /api/items/:id/image` (serve), `DELETE /api/items/:id/image` (remove). Files stored at `<IMAGE_PATH>/<id>.jpg`. `IMAGE_PATH` env var defaults to `./images`; in prod it is `/images` (mapped to Docker volume). All three are token-protected.
