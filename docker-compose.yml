@@ -22,7 +22,6 @@ services:
     environment:
       DATABASE_URL: postgresql://inventory:${POSTGRES_PASSWORD:-inventory_local}@postgres:5432/home_inventory
       PORT: 3000
-      API_TOKEN: ${API_TOKEN:-}
       SERVER_NAME: ${SERVER_NAME:-Home Inventory}
       IMAGE_PATH: /images
       JWT_SECRET: ${JWT_SECRET:-}
@@ -41,7 +40,6 @@ services:
     restart: unless-stopped
     environment:
       API_URL: http://api:3000
-      API_TOKEN: ${API_TOKEN:-}
       JWT_SECRET: ${JWT_SECRET:-}
     ports:
       - "${WEB_PORT:-3001}:3001"

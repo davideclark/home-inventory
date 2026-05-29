@@ -14,7 +14,6 @@ import {
   generateRefreshToken, hashRefreshToken,
 } from './auth';
 
-const API_TOKEN   = process.env.API_TOKEN   ?? '';
 const SERVER_NAME = process.env.SERVER_NAME ?? 'Home Inventory';
 const IMAGE_PATH  = process.env.IMAGE_PATH  ?? './images';
 
@@ -40,15 +39,16 @@ app.use('/api/*', async (c, next) => {
     }
   }
 
-  // Legacy API_TOKEN (mobile + dev mode)
-  if (API_TOKEN && c.req.header('X-API-Token') !== API_TOKEN) {
+  // No valid Bearer token — reject if JWT_SECRET is configured (production)
+  if (process.env.JWT_SECRET) {
     return c.json({ error: 'Unauthorized' }, 401);
   }
+  // Dev mode: no JWT_SECRET set, allow through
   return next();
 });
 
 app.get('/api/health',   (c) => c.json({ status: 'ok' }));
-app.get('/api/discover', (c) => c.json({ name: SERVER_NAME, version: API_VERSION, requiresToken: !!API_TOKEN }));
+app.get('/api/discover', (c) => c.json({ name: SERVER_NAME, version: API_VERSION, requiresToken: !!process.env.JWT_SECRET }));
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
 
