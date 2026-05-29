@@ -1,12 +1,12 @@
 import { View, StyleSheet, Pressable, ActivityIndicator, ScrollView, Keyboard, Alert } from 'react-native';
 import { Text, TextInput } from '../../components/Text';
 import { useState, useCallback } from 'react';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, router } from 'expo-router';
 import Constants from 'expo-constants';
 import { eq, isNotNull, and } from 'drizzle-orm';
 import { db } from '../../db';
 import { settings, item } from '../../schema';
-import { clearApiConfigCache, deleteContainer } from '../../sync';
+import { clearApiConfigCache, clearAuthTokens, getLoggedInUsername, deleteContainer } from '../../sync';
 
 type Status = 'idle' | 'testing' | 'ok' | 'error';
 
@@ -21,23 +21,23 @@ async function saveSetting(key: string, value: string) {
 }
 
 export default function SettingsScreen() {
-  const [url, setUrl]     = useState('');
-  const [token, setToken] = useState('');
-  const [status, setStatus] = useState<Status>('idle');
+  const [url, setUrl]         = useState('');
+  const [username, setUsername] = useState('');
+  const [status, setStatus]   = useState<Status>('idle');
   const [statusMsg, setStatusMsg] = useState('');
-  const [saving, setSaving] = useState(false);
+  const [saving, setSaving]   = useState(false);
   const [cleaning, setCleaning] = useState(false);
 
   useFocusEffect(useCallback(() => {
     (async () => {
       setUrl(await getSetting('api_url'));
-      setToken(await getSetting('api_token'));
+      setUsername((await getLoggedInUsername()) ?? '');
       setStatus('idle');
       setStatusMsg('');
     })();
   }, []));
 
-  async function testAndSave() {
+  async function testConnection() {
     Keyboard.dismiss();
     const trimmedUrl = url.trim().replace(/\/$/, '');
     setSaving(true);
@@ -50,26 +50,8 @@ export default function SettingsScreen() {
         setStatusMsg(`Server returned ${discoverRes.status}`);
         return;
       }
-      const { name, requiresToken } = await discoverRes.json();
-
-      if (requiresToken && !token.trim()) {
-        setStatus('error');
-        setStatusMsg('This server requires a token.');
-        return;
-      }
-      if (requiresToken) {
-        const authRes = await fetch(`${trimmedUrl}/api/catalogues`, {
-          headers: { 'X-API-Token': token.trim() },
-        });
-        if (authRes.status === 401) {
-          setStatus('error');
-          setStatusMsg('Wrong token — server rejected it.');
-          return;
-        }
-      }
-
+      const { name } = await discoverRes.json();
       await saveSetting('api_url', trimmedUrl);
-      await saveSetting('api_token', token.trim());
       clearApiConfigCache();
       setStatus('ok');
       setStatusMsg(`Connected to "${name}"`);
@@ -79,6 +61,21 @@ export default function SettingsScreen() {
     } finally {
       setSaving(false);
     }
+  }
+
+  async function signOut() {
+    const refreshToken = await getSetting('refresh_token');
+    const apiUrl = await getSetting('api_url');
+    if (refreshToken && apiUrl) {
+      fetch(`${apiUrl}/api/auth/logout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken }),
+      }).catch(() => {});
+    }
+    await clearAuthTokens();
+    clearApiConfigCache();
+    router.replace('/login');
   }
 
   async function removeOrphanedContainers() {
@@ -121,16 +118,6 @@ export default function SettingsScreen() {
     );
   }
 
-  async function disconnect() {
-    await saveSetting('api_url', '');
-    await saveSetting('api_token', '');
-    clearApiConfigCache();
-    setUrl('');
-    setToken('');
-    setStatus('idle');
-    setStatusMsg('');
-  }
-
   return (
     <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
       <Text style={styles.sectionHeader}>SERVER</Text>
@@ -145,17 +132,6 @@ export default function SettingsScreen() {
           autoCorrect={false}
           keyboardType="url"
         />
-        <View style={styles.divider} />
-        <Text style={styles.label}>Access Token</Text>
-        <TextInput
-          style={styles.input}
-          value={token}
-          onChangeText={(v) => { setToken(v); setStatus('idle'); }}
-          placeholder="Leave blank if no token set"
-          autoCapitalize="none"
-          autoCorrect={false}
-          secureTextEntry
-        />
       </View>
 
       {statusMsg ? (
@@ -164,17 +140,21 @@ export default function SettingsScreen() {
         </Text>
       ) : null}
 
-      <Pressable style={[styles.button, saving && styles.buttonDisabled]} onPress={testAndSave} disabled={saving}>
+      <Pressable style={[styles.button, saving && styles.buttonDisabled]} onPress={testConnection} disabled={saving}>
         {saving
           ? <ActivityIndicator color="#fff" />
-          : <Text style={styles.buttonText}>Test &amp; Save</Text>}
+          : <Text style={styles.buttonText}>Test Connection</Text>}
       </Pressable>
 
-      {url ? (
-        <Pressable style={styles.disconnectButton} onPress={disconnect}>
-          <Text style={styles.disconnectText}>Disconnect</Text>
-        </Pressable>
-      ) : null}
+      <Text style={[styles.sectionHeader, styles.accountHeader]}>ACCOUNT</Text>
+      <View style={styles.card}>
+        <Text style={styles.label}>Signed in as</Text>
+        <Text style={styles.usernameText}>{username || '—'}</Text>
+      </View>
+
+      <Pressable style={styles.signOutButton} onPress={signOut}>
+        <Text style={styles.signOutText}>Sign Out</Text>
+      </Pressable>
 
       <Text style={[styles.sectionHeader, styles.maintenanceHeader]}>MAINTENANCE</Text>
       <Pressable
@@ -193,23 +173,24 @@ export default function SettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 20, paddingTop: 28 },
-  sectionHeader: { fontSize: 13, fontWeight: '600', color: '#888', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8, marginLeft: 4 },
-  card: { backgroundColor: '#fff', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 4, marginBottom: 12 },
-  label: { fontSize: 13, color: '#888', marginTop: 12, marginBottom: 4 },
-  input: { fontSize: 16, color: '#111', paddingVertical: 8 },
-  divider: { height: StyleSheet.hairlineWidth, backgroundColor: '#e0e0e0' },
-  statusMsg: { fontSize: 14, marginBottom: 12, marginLeft: 4 },
-  statusOk: { color: '#34c759' },
-  statusError: { color: '#ff3b30' },
-  statusTesting: { color: '#888' },
-  button: { backgroundColor: '#007AFF', borderRadius: 10, paddingVertical: 14, alignItems: 'center', marginBottom: 12 },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: '#fff', fontSize: 17, fontWeight: '600' },
-  disconnectButton: { alignItems: 'center', paddingVertical: 12 },
-  disconnectText: { color: '#ff3b30', fontSize: 16 },
-  maintenanceHeader: { marginTop: 24 },
-  maintenanceButton: { backgroundColor: '#f2f2f7', borderRadius: 10, paddingVertical: 14, alignItems: 'center', marginBottom: 12, borderWidth: StyleSheet.hairlineWidth, borderColor: '#ccc' },
-  maintenanceButtonText: { color: '#333', fontSize: 16, fontWeight: '500' },
-  versionText: { fontSize: 12, color: '#bbb', textAlign: 'center', marginTop: 16 },
+  container:            { padding: 20, paddingTop: 28 },
+  sectionHeader:        { fontSize: 13, fontWeight: '600', color: '#888', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8, marginLeft: 4 },
+  card:                 { backgroundColor: '#fff', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 4, marginBottom: 12 },
+  label:                { fontSize: 13, color: '#888', marginTop: 12, marginBottom: 4 },
+  input:                { fontSize: 16, color: '#111', paddingVertical: 8 },
+  usernameText:         { fontSize: 16, color: '#111', paddingVertical: 12 },
+  statusMsg:            { fontSize: 14, marginBottom: 12, marginLeft: 4 },
+  statusOk:             { color: '#34c759' },
+  statusError:          { color: '#ff3b30' },
+  statusTesting:        { color: '#888' },
+  button:               { backgroundColor: '#007AFF', borderRadius: 10, paddingVertical: 14, alignItems: 'center', marginBottom: 12 },
+  buttonDisabled:       { opacity: 0.6 },
+  buttonText:           { color: '#fff', fontSize: 17, fontWeight: '600' },
+  accountHeader:        { marginTop: 24 },
+  signOutButton:        { alignItems: 'center', paddingVertical: 12, marginBottom: 4 },
+  signOutText:          { color: '#ff3b30', fontSize: 16 },
+  maintenanceHeader:    { marginTop: 24 },
+  maintenanceButton:    { backgroundColor: '#f2f2f7', borderRadius: 10, paddingVertical: 14, alignItems: 'center', marginBottom: 12, borderWidth: StyleSheet.hairlineWidth, borderColor: '#ccc' },
+  maintenanceButtonText:{ color: '#333', fontSize: 16, fontWeight: '500' },
+  versionText:          { fontSize: 12, color: '#bbb', textAlign: 'center', marginTop: 16 },
 });

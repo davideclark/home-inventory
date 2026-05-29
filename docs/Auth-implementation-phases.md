@@ -6,7 +6,7 @@ Full spec: `docs/Add-auth-and-home-concept.md`
 
 - [x] Phase 1 — Backend auth foundation
 - [x] Phase 2 — Web login upgrade
-- [ ] Phase 3 — Mobile login
+- [x] Phase 3 — Mobile login
 - [ ] Phase 4 — Home concept
 
 ---

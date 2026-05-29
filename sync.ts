@@ -23,6 +23,8 @@ async function setSetting(key: string, value: string): Promise<void> {
 let _deviceId: string | null = null;
 let _apiUrl: string | null = null;
 let _apiToken: string | null = null;
+let _jwtToken: string | null = null;
+let _jwtExpiresAt: number | null = null;
 
 export async function getDeviceId(): Promise<string> {
   if (_deviceId) return _deviceId;
@@ -50,9 +52,95 @@ async function getApiToken(): Promise<string | null> {
   return _apiToken || null;
 }
 
+async function getJwtToken(): Promise<string | null> {
+  if (_jwtToken !== null) return _jwtToken || null;
+  _jwtToken = (await getSetting('jwt_token')) ?? '';
+  return _jwtToken || null;
+}
+
+async function getJwtExpiresAt(): Promise<number | null> {
+  if (_jwtExpiresAt !== null) return _jwtExpiresAt || null;
+  const stored = await getSetting('jwt_expires_at');
+  _jwtExpiresAt = stored ? parseInt(stored, 10) : 0;
+  return _jwtExpiresAt || null;
+}
+
 export function clearApiConfigCache(): void {
   _apiUrl = null;
   _apiToken = null;
+  _jwtToken = null;
+  _jwtExpiresAt = null;
+}
+
+export async function storeAuthTokens(jwt: string, refreshToken: string, username: string): Promise<void> {
+  const expiresAt = Date.now() + 14 * 60 * 1000;
+  await Promise.all([
+    setSetting('jwt_token', jwt),
+    setSetting('jwt_expires_at', String(expiresAt)),
+    setSetting('refresh_token', refreshToken),
+    setSetting('logged_in_username', username),
+  ]);
+  _jwtToken = jwt;
+  _jwtExpiresAt = expiresAt;
+}
+
+export async function clearAuthTokens(): Promise<void> {
+  await Promise.all([
+    db.delete(settings).where(eq(settings.key, 'jwt_token')),
+    db.delete(settings).where(eq(settings.key, 'jwt_expires_at')),
+    db.delete(settings).where(eq(settings.key, 'refresh_token')),
+    db.delete(settings).where(eq(settings.key, 'logged_in_username')),
+  ]);
+  _jwtToken = null;
+  _jwtExpiresAt = null;
+}
+
+export async function getLoggedInUsername(): Promise<string | null> {
+  return getSetting('logged_in_username');
+}
+
+async function refreshJwt(): Promise<boolean> {
+  const refreshToken = await getSetting('refresh_token');
+  if (!refreshToken) return false;
+  const apiUrl = await getApiUrl();
+  try {
+    const res = await fetch(`${apiUrl}/api/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken }),
+    });
+    if (!res.ok) return false;
+    const { token } = await res.json();
+    const newExpiresAt = Date.now() + 14 * 60 * 1000;
+    await setSetting('jwt_token', token);
+    await setSetting('jwt_expires_at', String(newExpiresAt));
+    _jwtToken = token;
+    _jwtExpiresAt = newExpiresAt;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function checkStartupAuth(): Promise<boolean> {
+  const jwt = await getJwtToken();
+  if (!jwt) {
+    // No JWT — only require login if a server URL has been configured
+    const storedUrl = await getSetting('api_url');
+    const hasServer = !!(storedUrl || process.env.EXPO_PUBLIC_API_URL);
+    return !hasServer; // true = ok (no server = skip auth); false = needs login
+  }
+  const expiresAt = await getJwtExpiresAt();
+  if (expiresAt && expiresAt - Date.now() > 60_000) return true;
+  return refreshJwt();
+}
+
+async function ensureFreshJwt(): Promise<void> {
+  const expiresAt = await getJwtExpiresAt();
+  if (!expiresAt) return;
+  if (expiresAt - Date.now() > 60_000) return;
+  const ok = await refreshJwt();
+  if (!ok) throw new Error('Session expired — please log in again');
 }
 
 export async function isServerConfigured(): Promise<boolean> {
@@ -62,6 +150,8 @@ export async function isServerConfigured(): Promise<boolean> {
 }
 
 async function authHeaders(): Promise<Record<string, string>> {
+  const jwt = await getJwtToken();
+  if (jwt) return { 'Authorization': `Bearer ${jwt}` };
   const token = await getApiToken();
   return token ? { 'X-API-Token': token } : {};
 }
@@ -316,6 +406,7 @@ export async function getImageUrl(itemId: string): Promise<{ url: string; token:
 }
 
 export async function sync(): Promise<{ pushed: number; pulled: number }> {
+  await ensureFreshJwt();
   const since = (await getLastSyncAt()) ?? '1970-01-01T00:00:00Z';
   const { pushed, pushedItemIds, pushedCatIds, pushedTombstoneIds } = await push();
   const pulled = await pull(since, pushedItemIds, pushedCatIds, pushedTombstoneIds);

@@ -185,8 +185,10 @@ context/
 sync.ts                    Sync logic: getDeviceId(), sync(), push(), pull()
                            Exports deleteItem(id), deleteCatalogue(id), deleteContainer(id) —
                            always use these instead of db.delete() to ensure tombstones are created.
-                           Reads api_url and api_token from settings table.
-                           Sends X-API-Token header on all requests.
+                           Reads api_url, jwt_token, jwt_expires_at, refresh_token from settings table.
+                           Sends Authorization: Bearer <jwt> on all requests; falls back to X-API-Token if no JWT.
+                           Refreshes JWT automatically before sync if within 1 min of expiry.
+                           Exports storeAuthTokens(), clearAuthTokens(), checkStartupAuth().
                            Push-then-pull, last-write-wins on last_modified.
                            Cleans up orphaned items before push.
 db.ts                      Drizzle db instance (expo-sqlite)
@@ -274,7 +276,7 @@ Five tables:
 
 - **`catalogue`** — groups items and defines custom spec fields for the group. Has `icon`, `description`, `sort_order`, `fields` (JSON array of `FieldDef` — custom per-catalogue spec field definitions, e.g. `[{ key: "speed_mhz", label: "Speed (MHz)", type: "number", showInList: true }]`). Types: `text | number | textarea`. `showInList` controls which spec fields appear as subtitles in item list rows (mobile) or dedicated columns (web catalogue items page). No structural flag — whether an item is a container is determined solely by `item.can_contain`.
 - **`item`** — entire physical hierarchy in one self-referencing table. `item_number` is nullable (containers/locations don't need a sticker). `parent_id` is a UUID self-ref. `spec` is a JSON blob for all catalogue-specific fields — **this includes manufacturer, model, type, condition, colour, barcode, and status**, which are stored in spec rather than dedicated columns. Keys are defined by the parent catalogue's `fields` array; data is preserved when moving an item between catalogues. `can_contain` is per-item. `has_image` boolean — true when a photo exists at `<IMAGE_PATH>/<id>.jpg` on the server. Images are served via `GET /api/items/:id/image` (token-protected). CHECK constraint: `can_contain = 1 OR parent_id IS NOT NULL`.
-- **`settings`** — key/value store for app-level state. Keys: `device_id`, `last_sync_at`, `api_url`, `api_token`.
+- **`settings`** — key/value store for app-level state. Keys: `device_id`, `last_sync_at`, `api_url`, `api_token` (legacy), `jwt_token`, `jwt_expires_at`, `refresh_token`, `logged_in_username`.
 - **`sync_tombstone`** — records deletes so they propagate across devices. `entity_type` is `'catalogue' | 'item'`, `entity_id` is the UUID of the deleted record. Mobile adds `synced` boolean (SQLite); server schema omits it. Always delete via `deleteItem()`/`deleteCatalogue()`/`deleteContainer()` in `sync.ts` — never call `db.delete()` directly, or the tombstone won't be created.
 - **`sync_log`** — polymorphic audit trail. `entity_type` is `'catalogue' | 'item'`, `entity_id` is the UUID of the record. No DB-level FK — app-enforced.
 
@@ -284,7 +286,7 @@ All mutable tables carry `device_id`, `last_modified`, and `synced` for offline-
 
 **Protocol**: push-then-pull on demand (startup + manual ↻ button).
 
-**Auth**: all sync requests include `X-API-Token: <token>` header. Token is stored in the `settings` table (`api_token` key) and set via the Settings tab. Server rejects requests with wrong/missing token with 401.
+**Auth**: sync requests include `Authorization: Bearer <jwt>` when a JWT is stored; falls back to `X-API-Token: <token>` if no JWT (legacy/dev). JWT is obtained via the login screen (`app/login.tsx`) and stored in the `settings` table (`jwt_token`, `jwt_expires_at`, `refresh_token`, `logged_in_username`). The JWT is refreshed automatically at sync time if within 1 minute of expiry. On startup (`_layout.tsx`), `checkStartupAuth()` is called — if no valid JWT and a server URL is configured, the app redirects to `/login`.
 
 **Push**: selects all local records where `synced = false`, including `sync_tombstone` rows. Before pushing items, deletes any orphaned items whose `catalogue_id` no longer exists in the local catalogue table (prevents FK violations on the server). Sends unsynced catalogues, items, and tombstones in a single POST to `/api/sync/push`. On success, marks all pushed records `synced = true`.
 
