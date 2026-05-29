@@ -110,11 +110,10 @@ export default function SettingsPage() {
         </div>
         <div className="flex justify-between text-sm">
           <span className="text-gray-500">Auth</span>
-          <span className="font-medium">{discover ? (discover.requiresToken ? 'Token required' : 'Open') : '—'}</span>
+          <span className="font-medium">{discover ? (discover.requiresToken ? 'JWT required' : 'Open') : '—'}</span>
         </div>
         <p className="text-xs text-gray-400 pt-1">
-          API URL and token are configured via the <code className="bg-gray-100 px-1 rounded">API_URL</code> and{' '}
-          <code className="bg-gray-100 px-1 rounded">API_TOKEN</code> environment variables in Docker Compose.
+          API URL is configured via the <code className="bg-gray-100 px-1 rounded">API_URL</code> environment variable in Docker Compose.
         </p>
       </div>
 
