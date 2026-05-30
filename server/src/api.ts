@@ -1,5 +1,6 @@
 import { serve } from '@hono/node-server';
-import { Hono } from 'hono';
+import { getConnInfo } from '@hono/node-server/conninfo';
+import { Hono, type Context } from 'hono';
 import { eq, gte, or, ilike, sql, isNotNull, count } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import { randomUUID } from 'crypto';
@@ -16,6 +17,38 @@ import {
 
 const SERVER_NAME = process.env.SERVER_NAME ?? 'Home Inventory';
 const IMAGE_PATH  = process.env.IMAGE_PATH  ?? './images';
+
+// In-memory rate limiter factory — each call returns an independent counter with its own cleanup
+function createRateLimiter(max: number, windowMs: number) {
+  const attempts = new Map<string, { count: number; windowStart: number }>();
+  setInterval(() => {
+    const cutoff = Date.now() - windowMs;
+    for (const [ip, entry] of attempts) {
+      if (entry.windowStart < cutoff) attempts.delete(ip);
+    }
+  }, windowMs);
+  return function recordAttempt(ip: string): { allowed: boolean; retryAfterSecs: number } {
+    const now = Date.now();
+    const entry = attempts.get(ip);
+    if (!entry || now - entry.windowStart >= windowMs) {
+      attempts.set(ip, { count: 1, windowStart: now });
+      return { allowed: true, retryAfterSecs: 0 };
+    }
+    if (entry.count >= max) {
+      return { allowed: false, retryAfterSecs: Math.ceil((windowMs - (now - entry.windowStart)) / 1000) };
+    }
+    entry.count++;
+    return { allowed: true, retryAfterSecs: 0 };
+  };
+}
+
+const RATE_WINDOW_MS         = 15 * 60 * 1000;
+const recordLoginAttempt     = createRateLimiter(5,  RATE_WINDOW_MS); // credential stuffing
+const recordRefreshAttempt   = createRateLimiter(20, RATE_WINDOW_MS); // token abuse
+
+function getClientIp(c: Context): string {
+  return getConnInfo(c).remote.address ?? 'unknown';
+}
 
 type Variables = { userId: string; userRole: string };
 const app = new Hono<{ Variables: Variables }>();
@@ -53,6 +86,11 @@ app.get('/api/discover', (c) => c.json({ name: SERVER_NAME, version: API_VERSION
 // ── Auth ─────────────────────────────────────────────────────────────────────
 
 app.post('/api/auth/login', async (c) => {
+  const { allowed, retryAfterSecs } = recordLoginAttempt(getClientIp(c));
+  if (!allowed) {
+    return c.json({ error: 'Too many login attempts. Try again later.' }, 429, { 'Retry-After': String(retryAfterSecs) });
+  }
+
   const { username, password } = await c.req.json();
   if (!username || !password) return c.json({ error: 'Username and password required' }, 400);
   if (password.length > 256) return c.json({ error: 'Invalid credentials' }, 401);
@@ -78,6 +116,11 @@ app.post('/api/auth/login', async (c) => {
 });
 
 app.post('/api/auth/refresh', async (c) => {
+  const { allowed, retryAfterSecs } = recordRefreshAttempt(getClientIp(c));
+  if (!allowed) {
+    return c.json({ error: 'Too many requests. Try again later.' }, 429, { 'Retry-After': String(retryAfterSecs) });
+  }
+
   const { refreshToken } = await c.req.json();
   if (!refreshToken) return c.json({ error: 'Refresh token required' }, 400);
 
