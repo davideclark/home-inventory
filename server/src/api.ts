@@ -18,14 +18,50 @@ import {
 const SERVER_NAME = process.env.SERVER_NAME ?? 'Home Inventory';
 const IMAGE_PATH  = process.env.IMAGE_PATH  ?? './images';
 
-// In-memory rate limiter factory — each call returns an independent counter with its own cleanup
+// Exponential backoff rate limiter for login
+// 5 failures → blocked for 2 min; another 5 → 4 min; another 5 → 8 min, etc. (capped at 1 hour)
+// Successful login resets the counter entirely.
+interface LoginState { failures: number; strikes: number; blockedUntil: number; lastSeen: number; }
+const loginState = new Map<string, LoginState>();
+const LOGIN_THRESHOLD  = 5;
+const LOGIN_BASE_MS    = 2 * 60 * 1000;
+const LOGIN_MAX_MS     = 60 * 60 * 1000;
+setInterval(() => {
+  const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+  for (const [ip, s] of loginState) { if (s.lastSeen < cutoff) loginState.delete(ip); }
+}, 60 * 60 * 1000);
+
+function checkLoginBlocked(ip: string): { allowed: boolean; retryAfterSecs: number } {
+  const s = loginState.get(ip);
+  if (s && s.blockedUntil > Date.now()) {
+    return { allowed: false, retryAfterSecs: Math.ceil((s.blockedUntil - Date.now()) / 1000) };
+  }
+  return { allowed: true, retryAfterSecs: 0 };
+}
+
+function recordLoginFailure(ip: string): void {
+  const now = Date.now();
+  const s = loginState.get(ip) ?? { failures: 0, strikes: 0, blockedUntil: 0, lastSeen: now };
+  s.failures++;
+  s.lastSeen = now;
+  if (s.failures >= LOGIN_THRESHOLD) {
+    const blockMs = Math.min(LOGIN_BASE_MS * Math.pow(2, s.strikes), LOGIN_MAX_MS);
+    s.blockedUntil = now + blockMs;
+    s.strikes++;
+    s.failures = 0;
+    console.warn('[SECURITY] login_blocked ip=%s strike=%d block_mins=%d', ip, s.strikes, Math.round(blockMs / 60000));
+  }
+  loginState.set(ip, s);
+}
+
+function recordLoginSuccess(ip: string): void { loginState.delete(ip); }
+
+// Simple fixed-window rate limiter for refresh endpoint
 function createRateLimiter(max: number, windowMs: number) {
   const attempts = new Map<string, { count: number; windowStart: number }>();
   setInterval(() => {
     const cutoff = Date.now() - windowMs;
-    for (const [ip, entry] of attempts) {
-      if (entry.windowStart < cutoff) attempts.delete(ip);
-    }
+    for (const [ip, entry] of attempts) { if (entry.windowStart < cutoff) attempts.delete(ip); }
   }, windowMs);
   return function recordAttempt(ip: string): { allowed: boolean; retryAfterSecs: number } {
     const now = Date.now();
@@ -42,12 +78,23 @@ function createRateLimiter(max: number, windowMs: number) {
   };
 }
 
-const RATE_WINDOW_MS         = 15 * 60 * 1000;
-const recordLoginAttempt     = createRateLimiter(5,  RATE_WINDOW_MS); // credential stuffing
-const recordRefreshAttempt   = createRateLimiter(20, RATE_WINDOW_MS); // token abuse
+const recordRefreshAttempt = createRateLimiter(20, 15 * 60 * 1000);
+
+function isPrivateIp(addr: string): boolean {
+  const ip = addr.replace(/^::ffff:/, '');
+  return ip === '::1' || ip === '127.0.0.1'
+    || /^10\./.test(ip)
+    || /^172\.(1[6-9]|2\d|3[01])\./.test(ip)
+    || /^192\.168\./.test(ip);
+}
 
 function getClientIp(c: Context): string {
-  return getConnInfo(c).remote.address ?? 'unknown';
+  const connAddr = getConnInfo(c).remote.address ?? '';
+  if (isPrivateIp(connAddr)) {
+    const forwarded = c.req.header('x-forwarded-for')?.split(',')[0]?.trim();
+    if (forwarded) return forwarded;
+  }
+  return connAddr || 'unknown';
 }
 
 type Variables = { userId: string; userRole: string };
@@ -56,7 +103,7 @@ const app = new Hono<{ Variables: Variables }>();
 // Auth middleware — dual: JWT Bearer OR legacy API_TOKEN
 app.use('/api/*', async (c, next) => {
   const path = c.req.path;
-  const publicPaths = ['/api/health', '/api/discover', '/api/auth/login', '/api/auth/refresh'];
+  const publicPaths = ['/api/health', '/api/discover', '/api/auth/login', '/api/auth/refresh', '/api/auth/logout'];
   if (publicPaths.includes(path)) return next();
 
   // JWT Bearer
@@ -68,12 +115,14 @@ app.use('/api/*', async (c, next) => {
       c.set('userRole', payload.role);
       return next();
     } catch {
+      console.warn('[SECURITY] bad_jwt ip=%s path=%s', getClientIp(c), path);
       return c.json({ error: 'Unauthorized' }, 401);
     }
   }
 
   // No valid Bearer token — reject if JWT_SECRET is configured (production)
   if (process.env.JWT_SECRET) {
+    console.warn('[SECURITY] no_token ip=%s path=%s', getClientIp(c), path);
     return c.json({ error: 'Unauthorized' }, 401);
   }
   // Dev mode: no JWT_SECRET set, allow through
@@ -86,8 +135,10 @@ app.get('/api/discover', (c) => c.json({ name: SERVER_NAME, version: API_VERSION
 // ── Auth ─────────────────────────────────────────────────────────────────────
 
 app.post('/api/auth/login', async (c) => {
-  const { allowed, retryAfterSecs } = recordLoginAttempt(getClientIp(c));
+  const ip = getClientIp(c);
+  const { allowed, retryAfterSecs } = checkLoginBlocked(ip);
   if (!allowed) {
+    console.warn('[SECURITY] rate_limit_hit endpoint=login ip=%s retry_after=%ds', ip, retryAfterSecs);
     return c.json({ error: 'Too many login attempts. Try again later.' }, 429, { 'Retry-After': String(retryAfterSecs) });
   }
 
@@ -98,9 +149,12 @@ app.post('/api/auth/login', async (c) => {
   const trimmedUsername = username.trim();
   const [user] = await db.select().from(users).where(eq(users.username, trimmedUsername)).limit(1);
   if (!user || !(await verifyPassword(password, user.passwordHash))) {
+    console.warn('[SECURITY] failed_login ip=%s username=%s', ip, trimmedUsername);
+    recordLoginFailure(ip);
     return c.json({ error: 'Invalid credentials' }, 401);
   }
 
+  recordLoginSuccess(ip);
   const token        = await signJwt({ sub: user.id, role: user.role, forcePasswordChange: user.forcePasswordChange });
   const refreshToken = generateRefreshToken();
   const expiresAt    = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
@@ -116,8 +170,10 @@ app.post('/api/auth/login', async (c) => {
 });
 
 app.post('/api/auth/refresh', async (c) => {
-  const { allowed, retryAfterSecs } = recordRefreshAttempt(getClientIp(c));
+  const ip = getClientIp(c);
+  const { allowed, retryAfterSecs } = recordRefreshAttempt(ip);
   if (!allowed) {
+    console.warn('[SECURITY] rate_limit_hit endpoint=refresh ip=%s', ip);
     return c.json({ error: 'Too many requests. Try again later.' }, 429, { 'Retry-After': String(retryAfterSecs) });
   }
 

@@ -7,9 +7,16 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const apiUrl = process.env.API_URL ?? 'http://localhost:3000';
 
+  const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+    ?? req.headers.get('x-real-ip')
+    ?? '';
+
   const upstream = await fetch(`${apiUrl}/api/auth/login`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(clientIp ? { 'X-Forwarded-For': clientIp } : {}),
+    },
     body: JSON.stringify(body),
   });
 

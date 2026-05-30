@@ -22,6 +22,12 @@ async function proxy(req: NextRequest, path: string[]): Promise<NextResponse> {
     ? { 'X-API-Token': API_TOKEN }
     : {};
 
+  // Forward real client IP so the API can rate-limit per user, not per proxy container
+  const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+    ?? req.headers.get('x-real-ip')
+    ?? '';
+  if (clientIp) headers['X-Forwarded-For'] = clientIp;
+
   if (isMultipart) {
     headers['Content-Type'] = contentType;
   } else {
