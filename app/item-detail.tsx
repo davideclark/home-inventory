@@ -51,8 +51,8 @@ export default function ItemDetailScreen() {
 
   useEffect(() => {
     if (!i?.hasImage) { setImgSrc(null); return; }
-    getImageUrl(i.id).then(({ url, token }) => {
-      setImgSrc({ uri: url, headers: token ? { 'X-API-Token': token } : undefined });
+    getImageUrl(i.id).then(({ url, headers }) => {
+      setImgSrc({ uri: url, headers: Object.keys(headers).length ? headers : undefined });
     });
   }, [i?.id, i?.hasImage]);
 

@@ -45,7 +45,7 @@ export default function AddItemScreen() {
   const [saving, setSaving] = useState(false);
   const [hasImage, setHasImage] = useState(false);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [imageToken, setImageToken] = useState<string | null>(null);
+  const [imageHeaders, setImageHeaders] = useState<Record<string, string>>({});
   const [imageCacheBuster, setImageCacheBuster] = useState(0);
   const [imageUploading, setImageUploading] = useState(false);
 
@@ -133,9 +133,9 @@ export default function AddItemScreen() {
   async function uploadPhoto(uri: string) {
     setImageUploading(true);
     try {
-      const { url, token } = await getImageUrl(newItemId);
+      const { url, headers } = await getImageUrl(newItemId);
       setImageUrl(url);
-      setImageToken(token);
+      setImageHeaders(headers);
       await uploadItemImage(newItemId, uri);
       setHasImage(true);
       setImageCacheBuster(v => v + 1);
@@ -309,7 +309,7 @@ export default function AddItemScreen() {
             <View style={styles.imageRow}>
               {hasImage && imageUrl && (
                 <ExpoImage
-                  source={{ uri: `${imageUrl}?t=${imageCacheBuster}`, headers: imageToken ? { 'X-API-Token': imageToken } : {} }}
+                  source={{ uri: `${imageUrl}?t=${imageCacheBuster}`, headers: imageHeaders }}
                   style={styles.imageThumbnail}
                   contentFit="cover"
                 />

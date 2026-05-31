@@ -91,7 +91,7 @@ export default function EditItemScreen() {
   const [saving, setSaving] = useState(false);
   const [hasImage, setHasImage] = useState(false);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [imageToken, setImageToken] = useState<string | null>(null);
+  const [imageHeaders, setImageHeaders] = useState<Record<string, string>>({});
   const [imageCacheBuster, setImageCacheBuster] = useState(0);
   const [imageUploading, setImageUploading] = useState(false);
 
@@ -125,9 +125,9 @@ export default function EditItemScreen() {
     }
     setHasImage(existing.hasImage ?? false);
     if (existing.hasImage) {
-      getImageUrl(existing.id).then(({ url, token }) => {
+      getImageUrl(existing.id).then(({ url, headers }) => {
         setImageUrl(url);
-        setImageToken(token);
+        setImageHeaders(headers);
       });
     }
     setLoaded(true);
@@ -224,9 +224,9 @@ export default function EditItemScreen() {
   async function uploadPhoto(uri: string) {
     setImageUploading(true);
     try {
-      const { url, token } = await getImageUrl(itemId);
+      const { url, headers } = await getImageUrl(itemId);
       setImageUrl(url);
-      setImageToken(token);
+      setImageHeaders(headers);
       await uploadItemImage(itemId, uri);
       setHasImage(true);
       setImageCacheBuster(v => v + 1);
@@ -366,7 +366,7 @@ export default function EditItemScreen() {
           <View style={styles.imageRow}>
             {hasImage && imageUrl && (
               <ExpoImage
-                source={{ uri: `${imageUrl}?t=${imageCacheBuster}`, headers: imageToken ? { 'X-API-Token': imageToken } : {} }}
+                source={{ uri: `${imageUrl}?t=${imageCacheBuster}`, headers: imageHeaders }}
                 style={styles.imageThumbnail}
                 contentFit="cover"
               />

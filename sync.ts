@@ -414,10 +414,10 @@ export async function deleteItemImage(itemId: string): Promise<void> {
   await db.update(item).set({ hasImage: false }).where(eq(item.id, itemId));
 }
 
-export async function getImageUrl(itemId: string): Promise<{ url: string; token: string | null }> {
+export async function getImageUrl(itemId: string): Promise<{ url: string; headers: Record<string, string> }> {
   const apiUrl = await getApiUrl();
-  const token = await getApiToken();
-  return { url: `${apiUrl}/api/items/${itemId}/image`, token };
+  const headers = await authHeaders();
+  return { url: `${apiUrl}/api/items/${itemId}/image`, headers };
 }
 
 export async function sync(): Promise<{ pushed: number; pulled: number }> {
