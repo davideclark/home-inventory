@@ -238,6 +238,19 @@ Container Manager fetches the latest image versions and restarts the containers 
 
 Automatic — DSM renews the Let's Encrypt certificate before it expires. No action needed.
 
+### Apple "Limit IP Address Tracking" and local domain access
+
+If you have not set up port forwarding (Part 3, Step 4), `my-inventory.synology.me` resolves to the NAS's local IPv6 address via your router's DNS rather than the public IP. This works fine on most devices, but **Safari on iPhone and iPad may fail to connect** even when on the local network.
+
+The cause is Apple's **Limit IP Address Tracking** feature (iCloud Private Relay). When enabled, Safari routes web traffic through Apple's relay servers to hide your IP. Apple exempts RFC 1918 local addresses (`192.168.x.x`, `10.x.x.x`) from this relay, but a local IPv6 address or DDNS hostname is treated as external traffic and routed through Apple's servers — which cannot reach your NAS.
+
+**To check**: on your iPhone go to **Settings → Wi-Fi → tap your network name** and look for the **Limit IP Address Tracking** toggle.
+
+**Solutions** (pick one):
+- Use `https://<nas-local-ip>:3001` as your bookmark on the home network — local IPs are always exempt from Private Relay
+- Disable **Limit IP Address Tracking** for your home network in the same Wi-Fi settings screen
+- Set up port forwarding (Part 3, Step 4) so the domain resolves to your public IP — this routes correctly regardless of Private Relay
+
 ---
 
 ## Troubleshooting
