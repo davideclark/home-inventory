@@ -1,7 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 
-const API_URL   = process.env.API_URL   ?? 'http://localhost:3000';
-const API_TOKEN = process.env.API_TOKEN ?? '';
+const API_URL = process.env.API_URL ?? 'http://localhost:3000';
 
 async function proxy(req: NextRequest, path: string[]): Promise<NextResponse> {
   const search = new URL(req.url).search;
@@ -14,13 +13,8 @@ async function proxy(req: NextRequest, path: string[]): Promise<NextResponse> {
     body = isMultipart ? await req.arrayBuffer() : await req.text();
   }
 
-  // Prefer JWT from cookie, fall back to static API_TOKEN (dev)
   const jwt = req.cookies.get('home-inventory-jwt')?.value;
-  const headers: Record<string, string> = jwt
-    ? { 'Authorization': `Bearer ${jwt}` }
-    : API_TOKEN
-    ? { 'X-API-Token': API_TOKEN }
-    : {};
+  const headers: Record<string, string> = jwt ? { 'Authorization': `Bearer ${jwt}` } : {};
 
   // Forward real client IP so the API can rate-limit per user, not per proxy container
   const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()

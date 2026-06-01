@@ -22,7 +22,6 @@ async function setSetting(key: string, value: string): Promise<void> {
 
 let _deviceId: string | null = null;
 let _apiUrl: string | null = null;
-let _apiToken: string | null = null;
 let _jwtToken: string | null = null;
 let _jwtExpiresAt: number | null = null;
 
@@ -46,12 +45,6 @@ async function getApiUrl(): Promise<string> {
   return _apiUrl!;
 }
 
-async function getApiToken(): Promise<string | null> {
-  if (_apiToken !== null) return _apiToken || null;
-  _apiToken = (await getSetting('api_token')) ?? '';
-  return _apiToken || null;
-}
-
 async function getJwtToken(): Promise<string | null> {
   if (_jwtToken !== null) return _jwtToken || null;
   _jwtToken = (await getSetting('jwt_token')) ?? '';
@@ -67,7 +60,6 @@ async function getJwtExpiresAt(): Promise<number | null> {
 
 export function clearApiConfigCache(): void {
   _apiUrl = null;
-  _apiToken = null;
   _jwtToken = null;
   _jwtExpiresAt = null;
 }
@@ -166,9 +158,7 @@ export async function isServerConfigured(): Promise<boolean> {
 
 async function authHeaders(): Promise<Record<string, string>> {
   const jwt = await getJwtToken();
-  if (jwt) return { 'Authorization': `Bearer ${jwt}` };
-  const token = await getApiToken();
-  return token ? { 'X-API-Token': token } : {};
+  return jwt ? { 'Authorization': `Bearer ${jwt}` } : {};
 }
 
 export async function getLastSyncAt(): Promise<string | null> {

@@ -100,7 +100,7 @@ function getClientIp(c: Context): string {
 type Variables = { userId: string; userRole: string };
 const app = new Hono<{ Variables: Variables }>();
 
-// Auth middleware — dual: JWT Bearer OR legacy API_TOKEN
+// Auth middleware — Bearer JWT required (dev mode: JWT_SECRET unset allows all)
 app.use('/api/*', async (c, next) => {
   const path = c.req.path;
   const publicPaths = ['/api/health', '/api/discover', '/api/auth/login', '/api/auth/refresh', '/api/auth/logout'];
@@ -231,6 +231,8 @@ app.post('/api/auth/change-password', async (c) => {
     passwordHash: await hashPassword(newPassword),
     forcePasswordChange: false,
   }).where(eq(users.id, userId));
+
+  await db.update(refreshTokens).set({ revoked: true }).where(eq(refreshTokens.userId, userId));
 
   return c.json({ ok: true });
 });
