@@ -15,7 +15,7 @@ export async function middleware(req: NextRequest) {
   if (!process.env.JWT_SECRET) return NextResponse.next();
 
   // Public paths
-  if (pathname === '/login' || pathname.startsWith('/api/auth/')) {
+  if (pathname === '/login' || pathname === '/change-password' || pathname.startsWith('/api/auth/')) {
     return NextResponse.next();
   }
 
@@ -51,23 +51,27 @@ export async function middleware(req: NextRequest) {
       });
       if (refreshRes.ok) {
         const { token, refreshToken: newRefreshToken } = await refreshRes.json();
-        const res = NextResponse.next();
-        res.cookies.set(JWT_COOKIE, token, {
-          httpOnly: true,
-          secure: process.env.NODE_ENV === 'production',
-          sameSite: 'strict',
-          path: '/',
-          maxAge: 60 * 15,
-        });
-        if (newRefreshToken) {
-          res.cookies.set(REFRESH_COOKIE, newRefreshToken, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'strict',
-            path: '/',
-            maxAge: 60 * 60 * 24 * 30,
+        const secure = process.env.NODE_ENV === 'production';
+
+        // Check forcePasswordChange on the refreshed token
+        try {
+          const { payload: newPayload } = await jwtVerify(token, jwtSecret(), {
+            issuer: 'home-inventory-api',
+            audience: 'home-inventory',
           });
-        }
+          if (newPayload['forcePasswordChange'] && !pathname.startsWith('/api/') && pathname !== '/change-password') {
+            const url = req.nextUrl.clone();
+            url.pathname = '/change-password';
+            const redirect = NextResponse.redirect(url);
+            redirect.cookies.set(JWT_COOKIE, token, { httpOnly: true, secure, sameSite: 'strict', path: '/', maxAge: 60 * 15 });
+            if (newRefreshToken) redirect.cookies.set(REFRESH_COOKIE, newRefreshToken, { httpOnly: true, secure, sameSite: 'strict', path: '/', maxAge: 60 * 60 * 24 * 30 });
+            return redirect;
+          }
+        } catch { /* verification failure — still allow through with new token */ }
+
+        const res = NextResponse.next();
+        res.cookies.set(JWT_COOKIE, token, { httpOnly: true, secure, sameSite: 'strict', path: '/', maxAge: 60 * 15 });
+        if (newRefreshToken) res.cookies.set(REFRESH_COOKIE, newRefreshToken, { httpOnly: true, secure, sameSite: 'strict', path: '/', maxAge: 60 * 60 * 24 * 30 });
         return res;
       }
     } catch {

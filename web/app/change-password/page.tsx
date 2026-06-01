@@ -20,7 +20,7 @@ export default function ChangePasswordPage() {
     }
     setLoading(true);
     try {
-      const res = await fetch('/api/proxy/auth/change-password', {
+      const res = await fetch('/api/auth/change-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ currentPassword, newPassword }),

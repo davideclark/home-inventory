@@ -244,7 +244,15 @@ app.post('/api/auth/change-password', async (c) => {
 
   await db.update(refreshTokens).set({ revoked: true }).where(eq(refreshTokens.userId, userId));
 
-  return c.json({ ok: true });
+  const newRefreshToken = generateRefreshToken();
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+  await db.insert(refreshTokens).values({
+    id: randomUUID(), userId: user.id,
+    tokenHash: hashRefreshToken(newRefreshToken), expiresAt, revoked: false,
+  });
+  const token = await signJwt({ sub: user.id, role: user.role, forcePasswordChange: false });
+
+  return c.json({ ok: true, token, refreshToken: newRefreshToken });
 });
 
 // ── Catalogues ──────────────────────────────────────────────────────────────
