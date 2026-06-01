@@ -24,6 +24,7 @@ services:
       PORT: 3000
       SERVER_NAME: ${SERVER_NAME:-Home Inventory}
       IMAGE_PATH: /images
+      IMAGES_PATH: ${IMAGES_PATH:-/images}
       JWT_SECRET: ${JWT_SECRET:-}
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}

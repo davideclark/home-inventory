@@ -130,7 +130,7 @@ app.use('/api/*', async (c, next) => {
 });
 
 app.get('/api/health',   (c) => c.json({ status: 'ok' }));
-app.get('/api/discover', (c) => c.json({ name: SERVER_NAME, version: API_VERSION, requiresToken: !!process.env.JWT_SECRET }));
+app.get('/api/discover', (c) => c.json({ name: SERVER_NAME, version: API_VERSION, requiresToken: !!process.env.JWT_SECRET, imagePath: process.env.IMAGES_PATH ?? IMAGE_PATH }));
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
 
