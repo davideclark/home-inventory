@@ -5,7 +5,7 @@ services:
     environment:
       POSTGRES_DB: home_inventory
       POSTGRES_USER: inventory
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-inventory_local}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
@@ -20,7 +20,7 @@ services:
     image: ${DOCKERHUB_USERNAME}/home-inventory-api:latest
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql://inventory:${POSTGRES_PASSWORD:-inventory_local}@postgres:5432/home_inventory
+      DATABASE_URL: postgresql://inventory:${POSTGRES_PASSWORD}@postgres:5432/home_inventory
       PORT: 3000
       SERVER_NAME: ${SERVER_NAME:-Home Inventory}
       IMAGE_PATH: /images

@@ -83,16 +83,16 @@ docker buildx build --platform linux/amd64 -t davideclark/home-inventory-web:lat
 ```
 > Note: arm platforms excluded — QEMU emulation too slow. The NAS is amd64.
 
-**DATABASE_URL (local dev)**: `postgresql://inventory:inventory_local@localhost:5432/home_inventory`
+**DATABASE_URL (local dev)**: `postgresql://inventory:<postgres-password>@localhost:5432/home_inventory`
 
-**DATABASE_URL (NAS / MCP)**: `postgresql://inventory:inventory_local@DS1621plus.local:5433/home_inventory`
+**DATABASE_URL (NAS / MCP)**: `postgresql://inventory:<postgres-password>@DS1621plus.local:5433/home_inventory`
 
 **API URL for sync**: stored in the app's `settings` table (`api_url` key). Set via the Settings tab in the app. `EXPO_PUBLIC_API_URL` in `.env` is a dev-only fallback.
 
 **NAS `.env` file** (`/volume1/docker/home-inventory/.env`):
 ```
 DOCKERHUB_USERNAME=davideclark
-POSTGRES_PASSWORD=inventory_local
+POSTGRES_PASSWORD=<openssl rand -hex 32>
 SERVER_NAME=David's Inventory
 IMAGES_PATH=/volume1/docker/home-inventory/images
 API_PORT=13000
