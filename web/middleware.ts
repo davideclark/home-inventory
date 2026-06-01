@@ -50,7 +50,7 @@ export async function middleware(req: NextRequest) {
         body: JSON.stringify({ refreshToken }),
       });
       if (refreshRes.ok) {
-        const { token } = await refreshRes.json();
+        const { token, refreshToken: newRefreshToken } = await refreshRes.json();
         const res = NextResponse.next();
         res.cookies.set(JWT_COOKIE, token, {
           httpOnly: true,
@@ -59,6 +59,15 @@ export async function middleware(req: NextRequest) {
           path: '/',
           maxAge: 60 * 15,
         });
+        if (newRefreshToken) {
+          res.cookies.set(REFRESH_COOKIE, newRefreshToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            path: '/',
+            maxAge: 60 * 60 * 24 * 30,
+          });
+        }
         return res;
       }
     } catch {

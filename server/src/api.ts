@@ -189,8 +189,18 @@ app.post('/api/auth/refresh', async (c) => {
   const [user] = await db.select().from(users).where(eq(users.id, stored.userId)).limit(1);
   if (!user) return c.json({ error: 'User not found' }, 401);
 
+  const newRefreshToken = generateRefreshToken();
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+  await db.transaction(async (tx) => {
+    await tx.update(refreshTokens).set({ revoked: true }).where(eq(refreshTokens.id, stored.id));
+    await tx.insert(refreshTokens).values({
+      id: randomUUID(), userId: user.id,
+      tokenHash: hashRefreshToken(newRefreshToken), expiresAt, revoked: false,
+    });
+  });
+
   const token = await signJwt({ sub: user.id, role: user.role, forcePasswordChange: user.forcePasswordChange });
-  return c.json({ token });
+  return c.json({ token, refreshToken: newRefreshToken });
 });
 
 app.post('/api/auth/logout', async (c) => {

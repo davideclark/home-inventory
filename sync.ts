@@ -107,10 +107,11 @@ async function refreshJwt(): Promise<boolean> {
       return false;
     }
     if (!res.ok) return false; // Other server error — leave credentials intact
-    const { token } = await res.json();
+    const { token, refreshToken: newRefreshToken } = await res.json();
     const newExpiresAt = Date.now() + 14 * 60 * 1000;
     await setSetting('jwt_token', token);
     await setSetting('jwt_expires_at', String(newExpiresAt));
+    if (newRefreshToken) await setSetting('refresh_token', newRefreshToken);
     _jwtToken = token;
     _jwtExpiresAt = newExpiresAt;
     return true;
