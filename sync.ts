@@ -389,6 +389,7 @@ async function pull(
 }
 
 export async function uploadItemImage(itemId: string, localUri: string): Promise<void> {
+  await ensureFreshJwt();
   const apiUrl = await getApiUrl();
   const headers = await authHeaders();
   const form = new FormData();
@@ -399,6 +400,7 @@ export async function uploadItemImage(itemId: string, localUri: string): Promise
 }
 
 export async function deleteItemImage(itemId: string): Promise<void> {
+  await ensureFreshJwt();
   const apiUrl = await getApiUrl();
   const headers = await authHeaders();
   await fetch(`${apiUrl}/api/items/${itemId}/image`, { method: 'DELETE', headers });
@@ -407,6 +409,11 @@ export async function deleteItemImage(itemId: string): Promise<void> {
 
 export async function getImageUrl(itemId: string): Promise<{ url: string; headers: Record<string, string> }> {
   const apiUrl = await getApiUrl();
+  // Silently try to refresh if JWT is expired/near-expiry — don't throw if offline
+  const expiresAt = await getJwtExpiresAt();
+  if (expiresAt && expiresAt - Date.now() <= 60_000) {
+    await refreshJwt();
+  }
   const headers = await authHeaders();
   return { url: `${apiUrl}/api/items/${itemId}/image`, headers };
 }

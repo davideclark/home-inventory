@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
   }
 
   const { token, refreshToken } = data;
-  const secure = process.env.NODE_ENV === 'production';
+  const secure = process.env.SECURE_COOKIES === 'true';
   const res = NextResponse.json({ ok: true });
 
   res.cookies.set(JWT_COOKIE, token, {

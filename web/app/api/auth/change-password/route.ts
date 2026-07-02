@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
   if (!upstream.ok) return NextResponse.json(data, { status: upstream.status });
 
   const { token, refreshToken } = data;
-  const secure = process.env.NODE_ENV === 'production';
+  const secure = process.env.SECURE_COOKIES === 'true';
   const res = NextResponse.json({ ok: true });
 
   res.cookies.set(JWT_COOKIE, token, {

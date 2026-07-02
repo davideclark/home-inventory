@@ -51,7 +51,7 @@ export async function middleware(req: NextRequest) {
       });
       if (refreshRes.ok) {
         const { token, refreshToken: newRefreshToken } = await refreshRes.json();
-        const secure = process.env.NODE_ENV === 'production';
+        const secure = process.env.SECURE_COOKIES === 'true';
 
         // Check forcePasswordChange on the refreshed token
         try {
@@ -69,7 +69,11 @@ export async function middleware(req: NextRequest) {
           }
         } catch { /* verification failure — still allow through with new token */ }
 
-        const res = NextResponse.next();
+        // Pass the refreshed JWT to the route handler via a request header,
+        // since req.cookies in the handler still sees the old (expired) cookie.
+        const requestHeaders = new Headers(req.headers);
+        requestHeaders.set('x-refreshed-jwt', token);
+        const res = NextResponse.next({ request: { headers: requestHeaders } });
         res.cookies.set(JWT_COOKIE, token, { httpOnly: true, secure, sameSite: 'strict', path: '/', maxAge: 60 * 15 });
         if (newRefreshToken) res.cookies.set(REFRESH_COOKIE, newRefreshToken, { httpOnly: true, secure, sameSite: 'strict', path: '/', maxAge: 60 * 60 * 24 * 30 });
         return res;

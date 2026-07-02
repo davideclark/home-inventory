@@ -13,7 +13,9 @@ async function proxy(req: NextRequest, path: string[]): Promise<NextResponse> {
     body = isMultipart ? await req.arrayBuffer() : await req.text();
   }
 
-  const jwt = req.cookies.get('home-inventory-jwt')?.value;
+  // Prefer the JWT the middleware just refreshed (passed as a request header)
+  // over the old cookie, which may be expired within this same request cycle.
+  const jwt = req.headers.get('x-refreshed-jwt') ?? req.cookies.get('home-inventory-jwt')?.value;
   const headers: Record<string, string> = jwt ? { 'Authorization': `Bearer ${jwt}` } : {};
 
   // Forward real client IP so the API can rate-limit per user, not per proxy container
