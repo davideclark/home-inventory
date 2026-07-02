@@ -127,11 +127,6 @@ export default function ContainerScreen({ containerRoute }: { containerRoute: st
     return map;
   }, [catSummaryRows]);
 
-  const parentIdSet = useMemo(
-    () => new Set(catSummaryRows?.map(r => r.parentId).filter((id): id is string => id !== null)),
-    [catSummaryRows]
-  );
-
   const { data: children } = useLiveQuery(
     db.select({
         id: item.id,
@@ -229,7 +224,7 @@ export default function ContainerScreen({ containerRoute }: { containerRoute: st
           )}
           renderItem={({ item: child }) => (
             child.canContain
-              ? <ContainerRow child={child} containerMap={containerMap} cataloguesByContainer={cataloguesByContainer} hasChildren={parentIdSet.has(child.id)} containerRoute={containerRoute} />
+              ? <ContainerRow child={child} containerMap={containerMap} cataloguesByContainer={cataloguesByContainer} containerRoute={containerRoute} />
               : <ItemRow child={child} containerMap={containerMap} />
           )}
           SectionSeparatorComponent={() => <View style={styles.sectionSep} />}
@@ -253,7 +248,7 @@ type Child = {
   catalogueFields: string | null;
 };
 
-function ContainerRow({ child: c, containerMap, cataloguesByContainer, hasChildren, containerRoute }: { child: Child; containerMap: ContainerMap; cataloguesByContainer: Map<string, string[]>; hasChildren: boolean; containerRoute: string }) {
+function ContainerRow({ child: c, containerMap, cataloguesByContainer, containerRoute }: { child: Child; containerMap: ContainerMap; cataloguesByContainer: Map<string, string[]>; containerRoute: string }) {
   const swipeRef = useRef<Swipeable>(null);
 
   function renderRightActions() {
@@ -324,15 +319,13 @@ function ContainerRow({ child: c, containerMap, cataloguesByContainer, hasChildr
               : c.notes ? <Text style={styles.rowCatalogue}>{c.notes}</Text> : null;
           })()}
         </View>
-        {hasChildren && (
-          <Pressable
-            style={styles.browseButton}
-            onPress={() => router.push({ pathname: containerRoute as any, params: { itemId: c.id } })}
-            hitSlop={8}
-          >
-            <Text style={styles.browseButtonText}>Browse Contents ›</Text>
-          </Pressable>
-        )}
+        <Pressable
+          style={styles.browseButton}
+          onPress={() => router.push({ pathname: containerRoute as any, params: { itemId: c.id } })}
+          hitSlop={8}
+        >
+          <Text style={styles.browseButtonText}>Browse Contents ›</Text>
+        </Pressable>
       </Pressable>
     </Swipeable>
   );

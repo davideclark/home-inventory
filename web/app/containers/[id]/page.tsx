@@ -1,5 +1,5 @@
 'use client';
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
@@ -58,12 +58,6 @@ export default function ContainerPage() {
     queryKey: ['items-by-parent'],
     queryFn: () => api.items.list<Item[]>(),
   });
-
-  const parentIdSet = useMemo(() => {
-    const set = new Set<string>();
-    allLeafItems.forEach(it => { if (it.parentId) set.add(it.parentId); });
-    return set;
-  }, [allLeafItems]);
 
   const { data: catalogues = [] } = useQuery({
     queryKey: ['catalogues'],
@@ -185,7 +179,7 @@ export default function ContainerPage() {
                       })()}
                     </div>
                     <div className="flex gap-2 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                      {parentIdSet.has(c.id) && <Link href={`/containers/${c.id}`} className="btn-sm whitespace-nowrap">Browse Contents</Link>}
+                      <Link href={`/containers/${c.id}`} className="btn-sm whitespace-nowrap">Browse Contents</Link>
                       <button onClick={() => setEditItem(c)} className="btn-sm">Edit</button>
                       <button onClick={() => handleContainerDeleteClick(c)} className="btn-sm-danger">Delete</button>
                     </div>

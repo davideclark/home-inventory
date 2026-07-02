@@ -1,5 +1,5 @@
 'use client';
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
@@ -45,13 +45,6 @@ export default function CatalogueItemsPage() {
     queryKey: ['items', id],
     queryFn: () => api.items.list<Item[]>({ catalogueId: id }),
   });
-
-  const { data: parentIdList = [] } = useQuery({
-    queryKey: ['items', 'parent-ids'],
-    queryFn: () => api.items.parentIds(),
-  });
-
-  const parentIdSet = useMemo(() => new Set(parentIdList), [parentIdList]);
 
   const sorted = [...items].sort((a, b) => a.name.localeCompare(b.name));
 
@@ -124,7 +117,7 @@ export default function CatalogueItemsPage() {
                   <td className="px-4 py-3 text-gray-500 text-xs truncate max-w-xs">{it.notes ?? ''}</td>
                   <td className="px-4 py-3">
                     <div className="flex gap-2 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity justify-end">
-                      {it.canContain && parentIdSet.has(it.id) && (
+                      {it.canContain && (
                         <button onClick={() => router.push(`/containers/${it.id}`)} className="btn-sm whitespace-nowrap">Browse Contents</button>
                       )}
                       <button onClick={() => setEditItem(it)} className="btn-sm">Edit</button>
