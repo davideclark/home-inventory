@@ -101,6 +101,7 @@ JWT_SECRET=<openssl rand -hex 32>
 ADMIN_USERNAME=<username>
 ADMIN_PASSWORD=<initial password — forced to change on first login>
 ```
+`SECURE_COOKIES=true` can be added if the web is served over HTTPS — omit it (or set to `false`) for plain HTTP (the default for the local NAS setup). Without this, browsers silently drop the session cookies and login appears to succeed but immediately loops back.
 `IMAGES_PATH` is the host path mounted into the API container at `/images`. The API reads `IMAGE_PATH=/images` (set in `docker-compose.yml`). The directory is created automatically on startup if it doesn't exist.
 
 **To rebuild and push the Docker image** (run from repo root):
