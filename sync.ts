@@ -145,7 +145,11 @@ export async function checkStartupAuth(): Promise<boolean> {
 
 async function ensureFreshJwt(): Promise<void> {
   const expiresAt = await getJwtExpiresAt();
-  if (!expiresAt) return;
+  if (!expiresAt) {
+    // No expiry stored — if a JWT exists, try a proactive refresh (it may be stale)
+    if (await getJwtToken()) await refreshJwt();
+    return;
+  }
   if (expiresAt - Date.now() > 60_000) return;
   const ok = await refreshJwt();
   if (!ok) throw new Error('Session expired — please log in again');
@@ -392,10 +396,11 @@ export async function uploadItemImage(itemId: string, localUri: string): Promise
   await ensureFreshJwt();
   const apiUrl = await getApiUrl();
   const headers = await authHeaders();
+  if (!headers['Authorization']) throw new Error('Sign in via Settings to upload photos');
   const form = new FormData();
   form.append('file', { uri: localUri, name: 'photo.jpg', type: 'image/jpeg' } as unknown as Blob);
   const res = await fetch(`${apiUrl}/api/items/${itemId}/image`, { method: 'POST', headers, body: form });
-  if (!res.ok) throw new Error('Image upload failed');
+  if (!res.ok) throw new Error(`Image upload failed (${res.status})`);
   await db.update(item).set({ hasImage: true }).where(eq(item.id, itemId));
 }
 
