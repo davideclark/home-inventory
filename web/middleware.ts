@@ -63,8 +63,8 @@ export async function middleware(req: NextRequest) {
             const url = req.nextUrl.clone();
             url.pathname = '/change-password';
             const redirect = NextResponse.redirect(url);
-            redirect.cookies.set(JWT_COOKIE, token, { httpOnly: true, secure, sameSite: 'strict', path: '/', maxAge: 60 * 15 });
-            if (newRefreshToken) redirect.cookies.set(REFRESH_COOKIE, newRefreshToken, { httpOnly: true, secure, sameSite: 'strict', path: '/', maxAge: 60 * 60 * 24 * 30 });
+            redirect.cookies.set(JWT_COOKIE, token, { httpOnly: true, secure, sameSite: 'lax', path: '/', maxAge: 60 * 15 });
+            if (newRefreshToken) redirect.cookies.set(REFRESH_COOKIE, newRefreshToken, { httpOnly: true, secure, sameSite: 'lax', path: '/', maxAge: 60 * 60 * 24 * 30 });
             return redirect;
           }
         } catch { /* verification failure — still allow through with new token */ }
@@ -74,8 +74,8 @@ export async function middleware(req: NextRequest) {
         const requestHeaders = new Headers(req.headers);
         requestHeaders.set('x-refreshed-jwt', token);
         const res = NextResponse.next({ request: { headers: requestHeaders } });
-        res.cookies.set(JWT_COOKIE, token, { httpOnly: true, secure, sameSite: 'strict', path: '/', maxAge: 60 * 15 });
-        if (newRefreshToken) res.cookies.set(REFRESH_COOKIE, newRefreshToken, { httpOnly: true, secure, sameSite: 'strict', path: '/', maxAge: 60 * 60 * 24 * 30 });
+        res.cookies.set(JWT_COOKIE, token, { httpOnly: true, secure, sameSite: 'lax', path: '/', maxAge: 60 * 15 });
+        if (newRefreshToken) res.cookies.set(REFRESH_COOKIE, newRefreshToken, { httpOnly: true, secure, sameSite: 'lax', path: '/', maxAge: 60 * 60 * 24 * 30 });
         return res;
       }
     } catch {
