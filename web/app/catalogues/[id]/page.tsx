@@ -3,7 +3,6 @@ import { useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import ItemModal from '../../../components/ItemModal';
 import ItemDetailModal from '../../../components/ItemDetailModal';
 import ConfirmDialog from '../../../components/ConfirmDialog';
@@ -34,7 +33,6 @@ function Thumb({ item }: { item: Item }) {
 export default function CatalogueItemsPage() {
   const { id } = useParams<{ id: string }>();
   const qc = useQueryClient();
-  const router = useRouter();
 
   const { data: catalogue } = useQuery({
     queryKey: ['catalogue', id],
@@ -109,7 +107,11 @@ export default function CatalogueItemsPage() {
                   <Thumb item={it} />
                   <td className="px-4 py-3 text-gray-400 font-mono text-xs tabular-nums">{itemNum(it)}</td>
                   <td className="px-4 py-3 font-medium">
-                    <button onClick={() => setDetailItem(it)} className="hover:text-blue-500 text-left">{it.name}</button>
+                    {it.canContain ? (
+                      <Link href={`/containers/${it.id}`} className="hover:text-blue-500">{it.name}</Link>
+                    ) : (
+                      <button onClick={() => setDetailItem(it)} className="hover:text-blue-500 text-left">{it.name}</button>
+                    )}
                   </td>
                   {showInListFields.map(f => (
                     <td key={f.key} className="px-4 py-3 text-gray-500 text-xs">{it.spec?.[f.key] != null ? String(it.spec[f.key]) : ''}</td>
@@ -117,9 +119,6 @@ export default function CatalogueItemsPage() {
                   <td className="px-4 py-3 text-gray-500 text-xs truncate max-w-xs">{it.notes ?? ''}</td>
                   <td className="px-4 py-3">
                     <div className="flex gap-2 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity justify-end">
-                      {it.canContain && (
-                        <button onClick={() => router.push(`/containers/${it.id}`)} className="btn-sm whitespace-nowrap">Browse Contents</button>
-                      )}
                       <button onClick={() => setEditItem(it)} className="btn-sm">Edit</button>
                       <button onClick={() => setConfirmId(it.id)} className="btn-sm-danger">Delete</button>
                     </div>

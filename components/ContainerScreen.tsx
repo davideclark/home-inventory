@@ -303,7 +303,7 @@ function ContainerRow({ child: c, containerMap, cataloguesByContainer, container
     <Swipeable ref={swipeRef} renderRightActions={renderRightActions} friction={2}>
       <Pressable
         style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-        onPress={() => router.push({ pathname: '/item-detail', params: { itemId: c.id } })}
+        onPress={() => router.push({ pathname: containerRoute as any, params: { itemId: c.id } })}
       >
         {c.itemNumber != null && (
           <View style={styles.numberBadge}>
@@ -319,13 +319,7 @@ function ContainerRow({ child: c, containerMap, cataloguesByContainer, container
               : c.notes ? <Text style={styles.rowCatalogue}>{c.notes}</Text> : null;
           })()}
         </View>
-        <Pressable
-          style={styles.browseButton}
-          onPress={() => router.push({ pathname: containerRoute as any, params: { itemId: c.id } })}
-          hitSlop={8}
-        >
-          <Text style={styles.browseButtonText}>Browse Contents ›</Text>
-        </Pressable>
+        <Text style={styles.chevron}>›</Text>
       </Pressable>
     </Swipeable>
   );
@@ -429,8 +423,7 @@ const styles = StyleSheet.create({
   rowSubtitle: { fontSize: 13, color: '#666', marginTop: 2 },
   rowCatalogueRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
   rowCatalogue: { fontSize: 11, color: '#aaa' },
-  browseButton: { paddingHorizontal: 10, paddingVertical: 6, marginLeft: 8 },
-  browseButtonText: { fontSize: 13, color: '#007AFF', fontWeight: '600' },
+  chevron: { fontSize: 20, color: '#ccc', marginLeft: 8 },
   separator: { height: StyleSheet.hairlineWidth, backgroundColor: '#ddd', marginLeft: 76 },
   swipeActions: { flexDirection: 'row' },
   editAction: { backgroundColor: '#007AFF', justifyContent: 'center', alignItems: 'center', width: 80 },

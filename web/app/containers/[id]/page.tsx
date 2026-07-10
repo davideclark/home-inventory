@@ -167,19 +167,16 @@ export default function ContainerPage() {
                 {subContainers.map(c => (
                   <div key={c.id} className="flex items-center px-4 py-3 gap-3 hover:bg-gray-50 group">
                     <span className="text-lg">📦</span>
-                    <div className="flex-1 min-w-0">
-                      <button onClick={() => setDetailItem(c)} className="font-medium text-sm hover:text-blue-500 text-left">
-                        {c.name}
-                      </button>
+                    <Link href={`/containers/${c.id}`} className="flex-1 min-w-0 hover:text-blue-500">
+                      <div className="font-medium text-sm">{c.name}</div>
                       {(() => {
                         const cats = cataloguesByContainer.get(c.id);
                         return cats?.length
                           ? <div className="text-xs text-gray-400 mt-0.5">{cats.join(', ')}</div>
                           : c.notes ? <div className="text-xs text-gray-400 mt-0.5">{c.notes}</div> : null;
                       })()}
-                    </div>
+                    </Link>
                     <div className="flex gap-2 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Link href={`/containers/${c.id}`} className="btn-sm whitespace-nowrap">Browse Contents</Link>
                       <button onClick={() => setEditItem(c)} className="btn-sm">Edit</button>
                       <button onClick={() => handleContainerDeleteClick(c)} className="btn-sm-danger">Delete</button>
                     </div>

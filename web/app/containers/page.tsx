@@ -4,7 +4,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import ItemModal from '../../components/ItemModal';
-import ItemDetailModal from '../../components/ItemDetailModal';
 import { api } from '../../lib/api';
 import type { Item, Catalogue } from '../../lib/types';
 
@@ -44,7 +43,6 @@ export default function ContainersPage() {
 
   const [addOpen, setAddOpen] = useState(false);
   const [editItem, setEditItem] = useState<Item | null>(null);
-  const [detailItem, setDetailItem] = useState<Item | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{
     id: string; name: string; childCount: number; hasNonContainerChildren: boolean;
   } | null>(null);
@@ -91,10 +89,8 @@ export default function ContainersPage() {
           {roots.map(c => (
             <div key={c.id} className="flex items-center px-4 py-3 gap-3 hover:bg-gray-50 group">
               <span className="text-xl">📦</span>
-              <div className="flex-1 min-w-0">
-                <button onClick={() => setDetailItem(c)} className="font-medium text-sm hover:text-blue-500 text-left">
-                  {c.name}
-                </button>
+              <Link href={`/containers/${c.id}`} className="flex-1 min-w-0 hover:text-blue-500">
+                <div className="font-medium text-sm">{c.name}</div>
                 {subContainerCount(c.id) > 0 && (
                   <div className="text-xs text-gray-400">{subContainerCount(c.id)} sub-containers</div>
                 )}
@@ -104,9 +100,8 @@ export default function ContainersPage() {
                     ? <div className="text-xs text-gray-400 mt-0.5">{cats.join(', ')}</div>
                     : c.notes ? <div className="text-xs text-gray-400 mt-0.5">{c.notes}</div> : null;
                 })()}
-              </div>
+              </Link>
               <div className="flex gap-2 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                <Link href={`/containers/${c.id}`} className="btn-sm whitespace-nowrap">Browse Contents</Link>
                 <button onClick={() => setEditItem(c)} className="btn-sm">Edit</button>
                 <button onClick={() => handleDeleteClick(c)} className="btn-sm-danger">Delete</button>
               </div>
@@ -117,13 +112,6 @@ export default function ContainersPage() {
 
       {addOpen && (
         <ItemModal defaultCanContain onSave={afterSave} onClose={() => setAddOpen(false)} />
-      )}
-      {detailItem && !editItem && (
-        <ItemDetailModal
-          item={detailItem}
-          onClose={() => setDetailItem(null)}
-          onEdit={() => { setEditItem(detailItem); setDetailItem(null); }}
-        />
       )}
       {editItem && (
         <ItemModal item={editItem} onSave={afterSave} onClose={() => setEditItem(null)} />
