@@ -7,6 +7,7 @@ import ItemModal from '../../../components/ItemModal';
 import ItemDetailModal from '../../../components/ItemDetailModal';
 import ConfirmDialog from '../../../components/ConfirmDialog';
 import { api } from '../../../lib/api';
+import { formatFieldValue } from '../../../lib/format';
 import IconRenderer from '../../../components/IconRenderer';
 import type { Item, Catalogue, FieldDef } from '../../../lib/types';
 
@@ -132,7 +133,7 @@ export default function ContainerPage() {
   function specDetails(it: Item) {
     const fields: FieldDef[] = (it.catalogueId ? catalogueMap.get(it.catalogueId)?.fields ?? [] : []).filter(f => f.showInList);
     if (!fields.length || !it.spec) return '';
-    return fields.map(f => it.spec![f.key]).filter(Boolean).join(' · ');
+    return fields.map(f => formatFieldValue(f, it.spec![f.key])).filter(Boolean).join(' · ');
   }
 
   return (

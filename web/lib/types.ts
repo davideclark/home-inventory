@@ -1,8 +1,10 @@
 export type FieldDef = {
   key: string;
   label: string;
-  type: 'text' | 'number' | 'textarea';
+  type: 'text' | 'number' | 'textarea' | 'currency';
   showInList?: boolean;
+  // Counts toward insurance valuation totals — at most one per catalogue
+  isValue?: boolean;
 };
 
 export type Catalogue = {
@@ -16,6 +18,16 @@ export type Catalogue = {
   lastModified: string;
   deviceId: string;
   synced: boolean;
+};
+
+export type ItemAttachment = {
+  id: string;
+  itemId: string;
+  kind: 'photo' | 'document';
+  originalFilename: string;
+  mimeType: string;
+  size: number;
+  createdAt: string;
 };
 
 export type Item = {

@@ -42,6 +42,7 @@ services:
     environment:
       API_URL: http://api:3000
       JWT_SECRET: ${JWT_SECRET:-}
+      SECURE_COOKIES: ${SECURE_COOKIES:-}
     ports:
       - "${WEB_PORT:-3001}:3001"
     depends_on:

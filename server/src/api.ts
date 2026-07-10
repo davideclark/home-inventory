@@ -1,14 +1,14 @@
 import { serve } from '@hono/node-server';
 import { getConnInfo } from '@hono/node-server/conninfo';
 import { Hono, type Context } from 'hono';
-import { eq, gte, or, ilike, sql, isNotNull, count } from 'drizzle-orm';
+import { eq, gte, or, and, asc, ilike, sql, isNotNull, count } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import { randomUUID } from 'crypto';
-import { readFileSync, writeFileSync, mkdirSync, existsSync, unlinkSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, unlinkSync, readdirSync, statSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
 import JSZip from 'jszip';
 import { db } from './db';
-import { catalogue, item, syncTombstone, syncLog, users, refreshTokens } from './schema';
+import { catalogue, item, itemAttachment, syncTombstone, syncLog, users, refreshTokens } from './schema';
 import { version as API_VERSION } from '../package.json';
 import {
   hashPassword, verifyPassword, signJwt, verifyJwt,
@@ -17,6 +17,99 @@ import {
 
 const SERVER_NAME = process.env.SERVER_NAME ?? 'Home Inventory';
 const IMAGE_PATH  = process.env.IMAGE_PATH  ?? './images';
+const ATTACHMENTS_DIR = join(IMAGE_PATH, 'attachments');
+
+// ── Attachments: unified file store for item photos + documents ──────────────
+// Files live at <IMAGE_PATH>/attachments/<attachmentId>.<ext>. The extension
+// comes from a mime whitelist — never from the user-supplied filename.
+const EXT_BY_MIME: Record<string, string> = {
+  'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp',
+  'image/heic': 'heic', 'application/pdf': 'pdf',
+};
+function extForMime(mime: string): string { return EXT_BY_MIME[mime] ?? 'bin'; }
+function attachmentFilePath(a: { id: string; mimeType: string }): string {
+  return join(ATTACHMENTS_DIR, `${a.id}.${extForMime(a.mimeType)}`);
+}
+
+// item.hasImage is derived: true when the item has ≥1 photo attachment.
+// Bumps lastModified when the flag flips so mobile pulls learn about it.
+async function updateHasImage(itemId: string): Promise<void> {
+  const [row] = await db.select({ c: count() }).from(itemAttachment)
+    .where(and(eq(itemAttachment.itemId, itemId), eq(itemAttachment.kind, 'photo')));
+  const has = (row?.c ?? 0) > 0;
+  const [it] = await db.select({ hasImage: item.hasImage }).from(item).where(eq(item.id, itemId)).limit(1);
+  if (it && it.hasImage !== has) {
+    await db.update(item).set({ hasImage: has, lastModified: new Date().toISOString() }).where(eq(item.id, itemId));
+  }
+}
+
+async function createAttachment(itemId: string, buf: Buffer, mimeType: string, originalFilename: string, kind?: string) {
+  const id = randomUUID();
+  mkdirSync(ATTACHMENTS_DIR, { recursive: true });
+  writeFileSync(join(ATTACHMENTS_DIR, `${id}.${extForMime(mimeType)}`), buf);
+  const [row] = await db.insert(itemAttachment).values({
+    id, itemId,
+    kind: kind ?? (mimeType.startsWith('image/') ? 'photo' : 'document'),
+    originalFilename, mimeType, size: buf.length,
+    createdAt: new Date().toISOString(),
+  }).returning();
+  await updateHasImage(itemId);
+  return row;
+}
+
+// Oldest photo attachment = the item's primary photo (thumbnail).
+async function getPrimaryPhoto(itemId: string) {
+  const [row] = await db.select().from(itemAttachment)
+    .where(and(eq(itemAttachment.itemId, itemId), eq(itemAttachment.kind, 'photo')))
+    .orderBy(asc(itemAttachment.createdAt)).limit(1);
+  return row;
+}
+
+// Remove every file belonging to an item: all attachments (files + rows) and
+// any legacy <id>.jpg (also cleans up historically orphaned files). Must be
+// called BEFORE the item row is deleted from every delete path — including
+// tombstones arriving via sync push.
+async function deleteItemFiles(itemId: string): Promise<void> {
+  const legacy = join(IMAGE_PATH, `${itemId}.jpg`);
+  if (existsSync(legacy)) unlinkSync(legacy);
+  const rows = await db.select().from(itemAttachment).where(eq(itemAttachment.itemId, itemId));
+  for (const a of rows) {
+    const p = attachmentFilePath(a);
+    if (existsSync(p)) unlinkSync(p);
+  }
+  await db.delete(itemAttachment).where(eq(itemAttachment.itemId, itemId));
+}
+
+// One-time (idempotent) startup migration: move legacy <itemId>.jpg files into
+// the unified attachments store. createdAt uses the file's mtime so a migrated
+// photo remains the oldest (primary). Items flagged hasImage with no file are
+// only WARNED about, never repaired — auto-clearing the flag would mass-wipe
+// photo metadata (and sync it to every device) if the images volume ever
+// failed to mount or the API were pointed at the wrong IMAGE_PATH.
+async function migrateLegacyImages(): Promise<void> {
+  mkdirSync(ATTACHMENTS_DIR, { recursive: true });
+  const flagged = await db.select({ id: item.id }).from(item).where(eq(item.hasImage, true));
+  let migrated = 0, missing = 0;
+  for (const it of flagged) {
+    const [existingPhoto] = await db.select({ id: itemAttachment.id }).from(itemAttachment)
+      .where(and(eq(itemAttachment.itemId, it.id), eq(itemAttachment.kind, 'photo'))).limit(1);
+    if (existingPhoto) continue;
+    const legacy = join(IMAGE_PATH, `${it.id}.jpg`);
+    if (existsSync(legacy)) {
+      const st = statSync(legacy);
+      const attId = randomUUID();
+      renameSync(legacy, join(ATTACHMENTS_DIR, `${attId}.jpg`));
+      await db.insert(itemAttachment).values({
+        id: attId, itemId: it.id, kind: 'photo', originalFilename: 'photo.jpg',
+        mimeType: 'image/jpeg', size: st.size, createdAt: st.mtime.toISOString(),
+      });
+      migrated++;
+    } else {
+      missing++;
+    }
+  }
+  console.log(`[MIGRATE] images→attachments: ${migrated} migrated${missing ? `, ${missing} flagged items have no image file (left untouched — check IMAGE_PATH)` : ''}`);
+}
 
 // Exponential backoff rate limiter for login
 // 5 failures → blocked for 2 min; another 5 → 4 min; another 5 → 8 min, etc. (capped at 1 hour)
@@ -316,6 +409,7 @@ app.delete('/api/catalogues/:id', async (c) => {
     const its = await db.select({ id: item.id }).from(item).where(eq(item.catalogueId, id));
     for (const i of its) {
       await db.insert(syncTombstone).values({ id: randomUUID(), entityType: 'item', entityId: i.id, deletedAt: now, deviceId: 'server' }).onConflictDoNothing();
+      await deleteItemFiles(i.id);
       await db.delete(item).where(eq(item.id, i.id));
     }
   }
@@ -403,6 +497,7 @@ app.delete('/api/items/:id', async (c) => {
       for (const child of children) {
         if (child.canContain) queue.push(child.id);
         await db.insert(syncTombstone).values({ id: randomUUID(), entityType: 'item', entityId: child.id, deletedAt: now, deviceId: 'server' }).onConflictDoNothing();
+        await deleteItemFiles(child.id);
         await db.delete(item).where(eq(item.id, child.id));
       }
     }
@@ -416,17 +511,72 @@ app.delete('/api/items/:id', async (c) => {
         await db.update(item).set({ parentId: targetParentId, lastModified: now }).where(eq(item.id, child.id));
       } else {
         await db.insert(syncTombstone).values({ id: randomUUID(), entityType: 'item', entityId: child.id, deletedAt: now, deviceId: 'server' }).onConflictDoNothing();
+        await deleteItemFiles(child.id);
         await db.delete(item).where(eq(item.id, child.id));
       }
     }
   }
 
   await db.insert(syncTombstone).values({ id: randomUUID(), entityType: 'item', entityId: id, deletedAt: now, deviceId: 'server' }).onConflictDoNothing();
+  await deleteItemFiles(id);
   await db.delete(item).where(eq(item.id, id));
   return c.json({ ok: true });
 });
 
-// ── Images ───────────────────────────────────────────────────────────────────
+// ── Attachments (unified store for photos + documents) ──────────────────────
+
+app.get('/api/items/:id/attachments', async (c) => {
+  const rows = await db.select().from(itemAttachment)
+    .where(eq(itemAttachment.itemId, c.req.param('id')))
+    .orderBy(asc(itemAttachment.createdAt));
+  return c.json(rows);
+});
+
+app.post('/api/items/:id/attachments', async (c) => {
+  const id = c.req.param('id');
+  const [it] = await db.select({ id: item.id }).from(item).where(eq(item.id, id)).limit(1);
+  if (!it) return c.json({ error: 'Item not found' }, 404);
+
+  const body = await c.req.parseBody();
+  const file = body['file'];
+  if (!file || typeof file === 'string') return c.json({ error: 'No file provided' }, 400);
+
+  const kindParam = typeof body['kind'] === 'string' ? body['kind'] : undefined;
+  const kind = kindParam === 'photo' || kindParam === 'document' ? kindParam : undefined;
+  const buf = Buffer.from(await file.arrayBuffer());
+  const mimeType = file.type || 'application/octet-stream';
+  const row = await createAttachment(id, buf, mimeType, file.name || 'file', kind);
+  return c.json(row, 201);
+});
+
+app.get('/api/attachments/:id/file', async (c) => {
+  const [a] = await db.select().from(itemAttachment).where(eq(itemAttachment.id, c.req.param('id'))).limit(1);
+  if (!a) return c.json({ error: 'Not found' }, 404);
+  const filePath = attachmentFilePath(a);
+  if (!existsSync(filePath)) return c.json({ error: 'File missing' }, 404);
+  const safeName = a.originalFilename.replace(/[^\w.\- ()]/g, '_') || 'file';
+  return new Response(readFileSync(filePath), {
+    headers: {
+      'Content-Type': a.mimeType,
+      'Content-Disposition': `inline; filename="${safeName}"`,
+      'Cache-Control': 'max-age=3600',
+    },
+  });
+});
+
+app.delete('/api/attachments/:id', async (c) => {
+  const [a] = await db.select().from(itemAttachment).where(eq(itemAttachment.id, c.req.param('id'))).limit(1);
+  if (!a) return c.json({ error: 'Not found' }, 404);
+  const filePath = attachmentFilePath(a);
+  if (existsSync(filePath)) unlinkSync(filePath);
+  await db.delete(itemAttachment).where(eq(itemAttachment.id, a.id));
+  await updateHasImage(a.itemId);
+  return c.json({ ok: true });
+});
+
+// ── Legacy image endpoints — compatibility shims over the attachments store ──
+// Old mobile builds and existing web thumbnails keep working: the "image" is
+// the item's primary photo (oldest photo attachment).
 
 app.post('/api/items/:id/image', async (c) => {
   const id = c.req.param('id');
@@ -434,42 +584,65 @@ app.post('/api/items/:id/image', async (c) => {
   const file = body['file'];
   if (!file || typeof file === 'string') return c.json({ error: 'No file provided' }, 400);
   const buf = Buffer.from(await file.arrayBuffer());
-  writeFileSync(join(IMAGE_PATH, `${id}.jpg`), buf);
-  await db.update(item).set({ hasImage: true, lastModified: new Date().toISOString() }).where(eq(item.id, id));
+  await createAttachment(id, buf, file.type || 'image/jpeg', file.name || 'photo.jpg', 'photo');
   return c.json({ ok: true });
 });
 
 app.get('/api/items/:id/image', async (c) => {
-  const filePath = join(IMAGE_PATH, `${c.req.param('id')}.jpg`);
-  if (!existsSync(filePath)) return c.json({ error: 'Not found' }, 404);
-  const buf = readFileSync(filePath);
-  return new Response(buf, { headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'max-age=3600' } });
+  const id = c.req.param('id');
+  const primary = await getPrimaryPhoto(id);
+  if (primary) {
+    const filePath = attachmentFilePath(primary);
+    if (existsSync(filePath)) {
+      return new Response(readFileSync(filePath), {
+        headers: { 'Content-Type': primary.mimeType, 'Cache-Control': 'max-age=3600' },
+      });
+    }
+  }
+  // Fallback for any unmigrated legacy file
+  const legacy = join(IMAGE_PATH, `${id}.jpg`);
+  if (existsSync(legacy)) {
+    return new Response(readFileSync(legacy), { headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'max-age=3600' } });
+  }
+  return c.json({ error: 'Not found' }, 404);
 });
 
 app.delete('/api/items/:id/image', async (c) => {
-  const filePath = join(IMAGE_PATH, `${c.req.param('id')}.jpg`);
-  if (existsSync(filePath)) unlinkSync(filePath);
-  await db.update(item).set({ hasImage: false, lastModified: new Date().toISOString() }).where(eq(item.id, c.req.param('id')));
+  const id = c.req.param('id');
+  const primary = await getPrimaryPhoto(id);
+  if (primary) {
+    const filePath = attachmentFilePath(primary);
+    if (existsSync(filePath)) unlinkSync(filePath);
+    await db.delete(itemAttachment).where(eq(itemAttachment.id, primary.id));
+  }
+  const legacy = join(IMAGE_PATH, `${id}.jpg`);
+  if (existsSync(legacy)) unlinkSync(legacy);
+  await updateHasImage(id);
   return c.json({ ok: true });
 });
 
 // ── Backup / Restore ─────────────────────────────────────────────────────────
 
 app.get('/api/backup', async (c) => {
-  const [catalogues, items] = await Promise.all([
+  const [catalogues, items, attachments] = await Promise.all([
     db.select().from(catalogue),
     db.select().from(item),
+    db.select().from(itemAttachment),
   ]);
 
   const zip = new JSZip();
-  zip.file('data.json', JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), catalogues, items }, null, 2));
+  zip.file('data.json', JSON.stringify({
+    version: 2,
+    exportedAt: new Date().toISOString(),
+    catalogues, items,
+    // ext included so restore doesn't have to re-derive the stored filename
+    attachments: attachments.map(a => ({ ...a, ext: extForMime(a.mimeType) })),
+  }, null, 2));
 
-  for (const it of items) {
-    if (it.hasImage) {
-      const filePath = join(IMAGE_PATH, `${it.id}.jpg`);
-      if (existsSync(filePath)) {
-        zip.folder('images')!.file(`${it.id}.jpg`, readFileSync(filePath));
-      }
+  for (const a of attachments) {
+    const filePath = attachmentFilePath(a);
+    if (existsSync(filePath)) {
+      zip.folder('attachments')!.file(`${a.id}.${extForMime(a.mimeType)}`, readFileSync(filePath));
     }
   }
 
@@ -492,17 +665,26 @@ app.post('/api/restore', async (c) => {
   if (!dataFile) return c.json({ error: 'Invalid backup: missing data.json' }, 400);
 
   const data = JSON.parse(await dataFile.async('string'));
+  if (typeof data.version === 'number' && data.version > 2) {
+    return c.json({ error: `Unsupported backup version ${data.version}` }, 400);
+  }
 
   // Wipe (FK-safe order)
   await db.delete(syncLog);
   await db.delete(syncTombstone);
+  await db.delete(itemAttachment);
   await db.delete(item);
   await db.delete(catalogue);
 
-  // Delete all images
+  // Delete all image + attachment files
   try {
     for (const f of readdirSync(IMAGE_PATH).filter(f => f.endsWith('.jpg'))) {
       unlinkSync(join(IMAGE_PATH, f));
+    }
+  } catch { /* directory may not exist */ }
+  try {
+    for (const f of readdirSync(ATTACHMENTS_DIR)) {
+      unlinkSync(join(ATTACHMENTS_DIR, f));
     }
   } catch { /* directory may not exist */ }
 
@@ -513,17 +695,39 @@ app.post('/api/restore', async (c) => {
   for (const it of data.items ?? []) {
     await db.insert(item).values(it).onConflictDoNothing();
   }
+  const importedItemIds = new Set<string>((data.items ?? []).map((it: { id: string }) => it.id));
 
-  // Import images
-  let imageCount = 0;
-  for (const imgFile of zip.file(/^images\/.+\.jpg$/)) {
-    const filename = imgFile.name.replace('images/', '');
-    const imgBuf = Buffer.from(await imgFile.async('arraybuffer'));
-    writeFileSync(join(IMAGE_PATH, filename), imgBuf);
-    imageCount++;
+  mkdirSync(ATTACHMENTS_DIR, { recursive: true });
+  let attachmentCount = 0;
+
+  // v2: attachment rows + files under attachments/
+  for (const a of data.attachments ?? []) {
+    if (!importedItemIds.has(a.itemId)) continue;
+    const { ext: _ext, ...row } = a;
+    const zipEntry = zip.file(`attachments/${a.id}.${a.ext ?? extForMime(a.mimeType)}`);
+    if (zipEntry) {
+      const buf = Buffer.from(await zipEntry.async('arraybuffer'));
+      writeFileSync(attachmentFilePath(a), buf);
+    }
+    await db.insert(itemAttachment).values(row).onConflictDoNothing();
+    attachmentCount++;
   }
 
-  return c.json({ ok: true, catalogues: (data.catalogues ?? []).length, items: (data.items ?? []).length, images: imageCount });
+  // v1 compatibility: convert legacy images/<itemId>.jpg into photo attachments
+  for (const imgFile of zip.file(/^images\/.+\.jpg$/)) {
+    const itemId = imgFile.name.replace('images/', '').replace('.jpg', '');
+    if (!importedItemIds.has(itemId)) continue;
+    const buf = Buffer.from(await imgFile.async('arraybuffer'));
+    const attId = randomUUID();
+    writeFileSync(join(ATTACHMENTS_DIR, `${attId}.jpg`), buf);
+    await db.insert(itemAttachment).values({
+      id: attId, itemId, kind: 'photo', originalFilename: 'photo.jpg',
+      mimeType: 'image/jpeg', size: buf.length, createdAt: new Date().toISOString(),
+    });
+    attachmentCount++;
+  }
+
+  return c.json({ ok: true, catalogues: (data.catalogues ?? []).length, items: (data.items ?? []).length, attachments: attachmentCount });
 });
 
 // ── Sync ─────────────────────────────────────────────────────────────────────
@@ -547,6 +751,7 @@ app.post('/api/sync/push', async (c) => {
   for (const t of tombstonesIn) {
     await db.insert(syncTombstone).values(t).onConflictDoNothing();
     if (t.entityType === 'item') {
+      await deleteItemFiles(t.entityId);
       await db.delete(item).where(eq(item.id, t.entityId));
       tombstonedItemIds.add(t.entityId);
     } else if (t.entityType === 'catalogue') {
@@ -607,8 +812,10 @@ async function seedAdminUser() {
 
 async function main() {
   mkdirSync(IMAGE_PATH, { recursive: true });
+  mkdirSync(ATTACHMENTS_DIR, { recursive: true });
   await migrate(db, { migrationsFolder: './drizzle' });
   await seedAdminUser();
+  await migrateLegacyImages();
   const port = Number(process.env.PORT ?? 3000);
   serve({ fetch: app.fetch, port }, () => {
     console.log(`API listening on http://localhost:${port}`);

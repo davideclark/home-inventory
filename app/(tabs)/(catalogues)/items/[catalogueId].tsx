@@ -9,8 +9,7 @@ import { db } from '../../../../db';
 import { catalogue, item } from '../../../../schema';
 import type { Item } from '../../../../schema';
 import { deleteItem } from '../../../../sync';
-
-type FieldDef = { key: string; label: string; type: string; showInList?: boolean };
+import { type FieldDef, parseFields, formatFieldValue } from '../../../../fields';
 
 export default function ItemListScreen() {
   const { catalogueId } = useLocalSearchParams<{ catalogueId: string }>();
@@ -43,10 +42,10 @@ export default function ItemListScreen() {
   const cat = catData?.[0];
   const title = cat?.name ?? 'Items';
 
-  const showInListFields = useMemo(() => {
-    try { return (JSON.parse(cat?.fields ?? '[]') as FieldDef[]).filter(f => f.showInList); }
-    catch { return []; }
-  }, [cat?.fields]);
+  const showInListFields = useMemo(
+    () => parseFields(cat?.fields).filter(f => f.showInList),
+    [cat?.fields]
+  );
 
   return (
     <>
@@ -103,7 +102,7 @@ function buildPath(parentId: string | null | undefined, map: ContainerMap): stri
 function ItemRow({ item: i, containerMap, showInListFields }: { item: Item; containerMap: ContainerMap; showInListFields: FieldDef[] }) {
   const swipeRef = useRef<Swipeable>(null);
   const spec = i.spec ? JSON.parse(i.spec) : {};
-  const subtitle = showInListFields.map(f => spec[f.key]).filter(Boolean).join(' · ');
+  const subtitle = showInListFields.map(f => formatFieldValue(f, spec[f.key])).filter(Boolean).join(' · ');
   const containerPath = buildPath(i.parentId, containerMap);
 
   function renderRightActions() {

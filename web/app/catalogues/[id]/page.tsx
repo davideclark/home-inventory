@@ -8,6 +8,7 @@ import ItemDetailModal from '../../../components/ItemDetailModal';
 import ConfirmDialog from '../../../components/ConfirmDialog';
 import IconRenderer from '../../../components/IconRenderer';
 import { api } from '../../../lib/api';
+import { formatFieldValue } from '../../../lib/format';
 import type { Catalogue, FieldDef, Item } from '../../../lib/types';
 
 function Thumb({ item }: { item: Item }) {
@@ -114,7 +115,7 @@ export default function CatalogueItemsPage() {
                     )}
                   </td>
                   {showInListFields.map(f => (
-                    <td key={f.key} className="px-4 py-3 text-gray-500 text-xs">{it.spec?.[f.key] != null ? String(it.spec[f.key]) : ''}</td>
+                    <td key={f.key} className="px-4 py-3 text-gray-500 text-xs">{formatFieldValue(f, it.spec?.[f.key])}</td>
                   ))}
                   <td className="px-4 py-3 text-gray-500 text-xs truncate max-w-xs">{it.notes ?? ''}</td>
                   <td className="px-4 py-3">

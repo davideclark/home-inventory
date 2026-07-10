@@ -1,16 +1,23 @@
-import { View, StyleSheet, ScrollView, Pressable, useWindowDimensions } from 'react-native';
+import { View, StyleSheet, ScrollView, Pressable, useWindowDimensions, Alert } from 'react-native';
 import { Text } from '../components/Text';
 import { Image as ExpoImage } from 'expo-image';
+import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
-import { useMemo, useEffect, useState } from 'react';
+import { useMemo, useEffect, useState, useCallback } from 'react';
 import { eq } from 'drizzle-orm';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { db } from '../db';
 import { item, catalogue } from '../schema';
-import { getImageUrl } from '../sync';
+import {
+  getImageUrl, isServerConfigured,
+  listAttachments, uploadAttachment, deleteAttachment, getAttachmentUrl,
+  type ItemAttachment,
+} from '../sync';
 import CatalogueIcon from '../components/CatalogueIcon';
-
-type FieldDef = { key: string; label: string; type: string; showInList?: boolean };
+import { parseFields, formatFieldValue } from '../fields';
 
 export default function ItemDetailScreen() {
   const { itemId } = useLocalSearchParams<{ itemId: string }>();
@@ -40,10 +47,7 @@ export default function ItemDetailScreen() {
     return map;
   }, [containerItems]);
 
-  const specFields = useMemo(() => {
-    try { return JSON.parse(cat?.fields ?? '[]') as FieldDef[]; }
-    catch { return []; }
-  }, [cat?.fields]);
+  const specFields = useMemo(() => parseFields(cat?.fields), [cat?.fields]);
   const specValues: Record<string, unknown> = useMemo(() => {
     try { return i?.spec ? JSON.parse(i.spec) : {}; }
     catch { return {}; }
@@ -55,6 +59,105 @@ export default function ItemDetailScreen() {
       setImgSrc({ uri: url, headers: Object.keys(headers).length ? headers : undefined });
     });
   }, [i?.id, i?.hasImage]);
+
+  // Attachments — online-only; the section is hidden when the server isn't reachable
+  const [attachments, setAttachments] = useState<ItemAttachment[] | null>(null);
+  const [photoSrcs, setPhotoSrcs] = useState<Record<string, { uri: string; headers?: Record<string, string> }>>({});
+  const [attachmentBusy, setAttachmentBusy] = useState(false);
+
+  const loadAttachments = useCallback(async () => {
+    try {
+      if (!itemId || !(await isServerConfigured())) { setAttachments(null); return; }
+      const rows = await listAttachments(itemId);
+      const srcs: Record<string, { uri: string; headers?: Record<string, string> }> = {};
+      await Promise.all(rows.filter(a => a.kind === 'photo').map(async a => {
+        const { url, headers } = await getAttachmentUrl(a.id);
+        srcs[a.id] = { uri: url, headers: Object.keys(headers).length ? headers : undefined };
+      }));
+      setPhotoSrcs(srcs);
+      setAttachments(rows);
+    } catch {
+      setAttachments(null);
+    }
+  }, [itemId]);
+
+  useEffect(() => { loadAttachments(); }, [loadAttachments]);
+
+  async function openAttachment(a: ItemAttachment) {
+    try {
+      const { url, headers } = await getAttachmentUrl(a.id);
+      const ext = a.originalFilename.includes('.') ? a.originalFilename.split('.').pop() : 'bin';
+      const dest = `${FileSystem.cacheDirectory}attachment-${a.id}.${ext}`;
+      const dl = await FileSystem.downloadAsync(url, dest, { headers });
+      await Sharing.shareAsync(dl.uri, { mimeType: a.mimeType });
+    } catch (e) {
+      Alert.alert('Could not open attachment', e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function doUpload(file: { uri: string; name: string; mimeType: string }, kind?: 'photo' | 'document') {
+    setAttachmentBusy(true);
+    try {
+      await uploadAttachment(itemId, file, kind);
+      await loadAttachments();
+    } catch (e) {
+      Alert.alert('Upload failed', e instanceof Error ? e.message : String(e));
+    } finally {
+      setAttachmentBusy(false);
+    }
+  }
+
+  function addPhoto() {
+    Alert.alert('Add Photo', undefined, [
+      {
+        text: 'Take Photo',
+        onPress: async () => {
+          const { status } = await ImagePicker.requestCameraPermissionsAsync();
+          if (status !== 'granted') {
+            Alert.alert('Permission required', 'Camera access is needed to take a photo.');
+            return;
+          }
+          const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.8 });
+          if (!result.canceled && result.assets[0]) await doUpload({ uri: result.assets[0].uri, name: 'photo.jpg', mimeType: 'image/jpeg' }, 'photo');
+        },
+      },
+      {
+        text: 'Choose from Library',
+        onPress: async () => {
+          const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8 });
+          if (!result.canceled && result.assets[0]) await doUpload({ uri: result.assets[0].uri, name: 'photo.jpg', mimeType: 'image/jpeg' }, 'photo');
+        },
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }
+
+  async function addDocument() {
+    const result = await DocumentPicker.getDocumentAsync({ type: ['application/pdf', 'image/*'], copyToCacheDirectory: true });
+    if (result.canceled || !result.assets[0]) return;
+    const asset = result.assets[0];
+    await doUpload(
+      { uri: asset.uri, name: asset.name ?? 'document', mimeType: asset.mimeType ?? 'application/octet-stream' },
+      'document'
+    );
+  }
+
+  function confirmDeleteAttachment(a: ItemAttachment) {
+    Alert.alert('Remove Attachment', `Remove "${a.originalFilename}"?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove', style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteAttachment(a.id);
+            await loadAttachments();
+          } catch (e) {
+            Alert.alert('Could not remove', e instanceof Error ? e.message : String(e));
+          }
+        },
+      },
+    ]);
+  }
 
   if (!i) {
     return (
@@ -129,10 +232,8 @@ export default function ItemDetailScreen() {
               </View>
             )}
             {specFields.map(field => {
-              const val = specValues[field.key];
-              return val != null && val !== '' ? (
-                <Row key={field.key} label={field.label} value={String(val)} />
-              ) : null;
+              const val = formatFieldValue(field, specValues[field.key]);
+              return val ? <Row key={field.key} label={field.label} value={val} /> : null;
             })}
           </View>
         )}
@@ -150,6 +251,51 @@ export default function ItemDetailScreen() {
           <View style={styles.section}>
             {containerPath && <Row label="Location" value={containerPath} />}
             {i.canContain && <Row label="Can contain items" value="Yes" />}
+          </View>
+        )}
+
+        {/* Attachments — photos & receipts (online only) */}
+        {attachments !== null && (
+          <View style={styles.section}>
+            <Text style={styles.label}>Photos & Receipts</Text>
+            {attachments.filter(a => a.kind === 'photo').length > 0 && (
+              <View style={styles.attachmentGrid}>
+                {attachments.filter(a => a.kind === 'photo').map(a => (
+                  photoSrcs[a.id] ? (
+                    <Pressable key={a.id} onPress={() => openAttachment(a)} onLongPress={() => confirmDeleteAttachment(a)}>
+                      <ExpoImage source={photoSrcs[a.id]} style={styles.attachmentThumb} contentFit="cover" />
+                    </Pressable>
+                  ) : null
+                ))}
+              </View>
+            )}
+            {attachments.filter(a => a.kind === 'document').map(a => (
+              <View key={a.id} style={styles.attachmentRow}>
+                <Pressable style={styles.attachmentName} onPress={() => openAttachment(a)}>
+                  <Text style={styles.attachmentNameText} numberOfLines={1}>📄 {a.originalFilename}</Text>
+                </Pressable>
+                <Pressable hitSlop={8} onPress={() => confirmDeleteAttachment(a)}>
+                  <Text style={styles.attachmentDelete}>✕</Text>
+                </Pressable>
+              </View>
+            ))}
+            <View style={styles.attachmentButtons}>
+              <Pressable
+                style={({ pressed }) => [styles.attachmentBtn, pressed && styles.attachmentBtnPressed, attachmentBusy && styles.attachmentBtnDisabled]}
+                disabled={attachmentBusy}
+                onPress={addPhoto}
+              >
+                <Text style={styles.attachmentBtnText}>{attachmentBusy ? 'Uploading…' : '📷 Add Photo'}</Text>
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [styles.attachmentBtn, pressed && styles.attachmentBtnPressed, attachmentBusy && styles.attachmentBtnDisabled]}
+                disabled={attachmentBusy}
+                onPress={addDocument}
+              >
+                <Text style={styles.attachmentBtnText}>📎 Add Document</Text>
+              </Pressable>
+            </View>
+            <Text style={styles.attachmentHint}>Tap to open · long-press a photo to remove</Text>
           </View>
         )}
 
@@ -187,4 +333,16 @@ const styles = StyleSheet.create({
   value: { fontSize: 15, color: '#111', flex: 2, textAlign: 'right' },
   catalogueValue: { flexDirection: 'row', alignItems: 'center', gap: 6, flex: 2, justifyContent: 'flex-end' },
   notes: { fontSize: 15, color: '#111', lineHeight: 22 },
+  attachmentGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  attachmentThumb: { width: 72, height: 72, borderRadius: 8, backgroundColor: '#f0f0f5' },
+  attachmentRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  attachmentName: { flex: 1 },
+  attachmentNameText: { fontSize: 15, color: '#007AFF' },
+  attachmentDelete: { fontSize: 14, color: '#ccc', paddingHorizontal: 4 },
+  attachmentButtons: { flexDirection: 'row', gap: 8, marginTop: 4 },
+  attachmentBtn: { flex: 1, backgroundColor: '#f0f0f5', borderRadius: 8, paddingVertical: 10, alignItems: 'center' },
+  attachmentBtnPressed: { backgroundColor: '#e0e0ea' },
+  attachmentBtnDisabled: { opacity: 0.5 },
+  attachmentBtnText: { fontSize: 14, color: '#007AFF', fontWeight: '500' },
+  attachmentHint: { fontSize: 11, color: '#bbb', textAlign: 'center', marginTop: 2 },
 });

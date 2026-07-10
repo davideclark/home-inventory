@@ -94,7 +94,10 @@ export default function CataloguesPage() {
   }
   function updateField(i: number, k: keyof FieldDef, value: string | boolean) {
     setForm(p => {
-      const fields = [...p.fields];
+      // Only one field per catalogue may count toward valuation totals
+      const fields = k === 'isValue' && value === true
+        ? p.fields.map(fl => ({ ...fl, isValue: false }))
+        : [...p.fields];
       const old = fields[i];
       const updated = { ...old, [k]: value } as FieldDef;
       if (k === 'label' && typeof value === 'string' && old.key === toKey(old.label)) updated.key = toKey(value);
@@ -201,6 +204,7 @@ export default function CataloguesPage() {
                           <option value="text">Text</option>
                           <option value="number">Number</option>
                           <option value="textarea">Multiline</option>
+                          <option value="currency">Currency (£)</option>
                         </select>
                         <button type="button" onClick={() => removeField(i)} className="text-gray-400 hover:text-red-500 shrink-0">✕</button>
                       </div>
@@ -214,11 +218,20 @@ export default function CataloguesPage() {
                             placeholder="auto"
                           />
                         </div>
-                        <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer">
-                          <input type="checkbox" checked={!!field.showInList}
-                            onChange={e => updateField(i, 'showInList', e.target.checked)} />
-                          Show in list
-                        </label>
+                        <div className="flex items-center gap-4">
+                          {(field.type === 'currency' || field.type === 'number') && (
+                            <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer">
+                              <input type="checkbox" checked={!!field.isValue}
+                                onChange={e => updateField(i, 'isValue', e.target.checked)} />
+                              Counts toward valuation
+                            </label>
+                          )}
+                          <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer">
+                            <input type="checkbox" checked={!!field.showInList}
+                              onChange={e => updateField(i, 'showInList', e.target.checked)} />
+                            Show in list
+                          </label>
+                        </div>
                       </div>
                     </div>
                   ))}

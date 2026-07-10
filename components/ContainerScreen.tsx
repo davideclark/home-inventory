@@ -9,8 +9,7 @@ import { db } from '../db';
 import { item, catalogue } from '../schema';
 import { deleteItem, deleteContainer } from '../sync';
 import CatalogueIcon from './CatalogueIcon';
-
-type FieldDef = { key: string; label: string; type: string; showInList?: boolean };
+import { parseFields, formatFieldValue } from '../fields';
 
 function naturalSort(a: string, b: string): number {
   const re = /(\d+)/g;
@@ -328,11 +327,8 @@ function ContainerRow({ child: c, containerMap, cataloguesByContainer, container
 function ItemRow({ child: i, containerMap }: { child: Child; containerMap: ContainerMap }) {
   const swipeRef = useRef<Swipeable>(null);
   const spec = i.spec ? JSON.parse(i.spec) : {};
-  const showInListFields: FieldDef[] = (() => {
-    try { return (JSON.parse(i.catalogueFields ?? '[]') as FieldDef[]).filter(f => f.showInList); }
-    catch { return []; }
-  })();
-  const subtitle = showInListFields.map(f => spec[f.key]).filter(Boolean).join(' · ');
+  const showInListFields = parseFields(i.catalogueFields).filter(f => f.showInList);
+  const subtitle = showInListFields.map(f => formatFieldValue(f, spec[f.key])).filter(Boolean).join(' · ');
 
   function renderRightActions() {
     return (

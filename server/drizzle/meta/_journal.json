@@ -50,6 +50,13 @@
       "when": 1780060726080,
       "tag": "0006_sleepy_bloodstorm",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1783710195350,
+      "tag": "0007_mighty_carlie_cooper",
+      "breakpoints": true
     }
   ]
 }

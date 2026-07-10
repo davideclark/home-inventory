@@ -37,6 +37,24 @@ export const item = pgTable('item', {
   parentRequired: check('chk_parent_required', sql`${table.canContain} = true OR ${table.parentId} IS NOT NULL`),
 }));
 
+// Unified store for ALL item files — photos and documents (receipts etc.).
+// item.hasImage is derived from this table: true when the item has at least
+// one 'photo' attachment. The "primary" photo (thumbnail) is the oldest by
+// createdAt. Deliberately NOT part of the offline sync protocol — clients
+// fetch attachment lists over the API on demand.
+export const itemAttachment = pgTable('item_attachment', {
+  id:               uuid('id').primaryKey().defaultRandom(),
+  itemId:           uuid('item_id').notNull().references(() => item.id, { onDelete: 'cascade' }),
+  kind:             text('kind').notNull(), // 'photo' | 'document'
+  originalFilename: text('original_filename').notNull(),
+  mimeType:         text('mime_type').notNull(),
+  size:             integer('size').notNull(),
+  createdAt:        text('created_at').notNull().default(sql`to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`),
+},
+(table) => ({
+  itemIdx: index('idx_attachment_item').on(table.itemId),
+}));
+
 export const syncTombstone = pgTable('sync_tombstone', {
   id:         text('id').primaryKey(),
   entityType: text('entity_type').notNull(),
@@ -83,9 +101,10 @@ export const refreshTokens = pgTable('refresh_tokens', {
   createdAt: text('created_at').notNull().default(sql`to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`),
 });
 
-export type Catalogue    = typeof catalogue.$inferSelect;
-export type NewCatalogue = typeof catalogue.$inferInsert;
-export type Item         = typeof item.$inferSelect;
-export type NewItem      = typeof item.$inferInsert;
-export type User         = typeof users.$inferSelect;
-export type NewUser      = typeof users.$inferInsert;
+export type Catalogue      = typeof catalogue.$inferSelect;
+export type NewCatalogue   = typeof catalogue.$inferInsert;
+export type Item           = typeof item.$inferSelect;
+export type NewItem        = typeof item.$inferInsert;
+export type User           = typeof users.$inferSelect;
+export type NewUser        = typeof users.$inferInsert;
+export type ItemAttachment = typeof itemAttachment.$inferSelect;

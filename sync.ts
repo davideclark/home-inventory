@@ -423,6 +423,62 @@ export async function getImageUrl(itemId: string): Promise<{ url: string; header
   return { url: `${apiUrl}/api/items/${itemId}/image`, headers };
 }
 
+// ── Attachments (photos + documents) — server-side only, fetched on demand ──
+
+export type ItemAttachment = {
+  id: string;
+  itemId: string;
+  kind: 'photo' | 'document';
+  originalFilename: string;
+  mimeType: string;
+  size: number;
+  createdAt: string;
+};
+
+export async function listAttachments(itemId: string): Promise<ItemAttachment[]> {
+  await ensureFreshJwt();
+  const apiUrl = await getApiUrl();
+  const headers = await authHeaders();
+  if (!headers['Authorization']) throw new Error('Sign in via Settings to view attachments');
+  const res = await fetch(`${apiUrl}/api/items/${itemId}/attachments`, { headers });
+  if (!res.ok) throw new Error(`Could not load attachments (${res.status})`);
+  return res.json();
+}
+
+export async function uploadAttachment(
+  itemId: string,
+  file: { uri: string; name: string; mimeType: string },
+  kind?: 'photo' | 'document'
+): Promise<void> {
+  await ensureFreshJwt();
+  const apiUrl = await getApiUrl();
+  const headers = await authHeaders();
+  if (!headers['Authorization']) throw new Error('Sign in via Settings to upload attachments');
+  const form = new FormData();
+  form.append('file', { uri: file.uri, name: file.name, type: file.mimeType } as unknown as Blob);
+  if (kind) form.append('kind', kind);
+  const res = await fetch(`${apiUrl}/api/items/${itemId}/attachments`, { method: 'POST', headers, body: form });
+  if (!res.ok) throw new Error(`Attachment upload failed (${res.status})`);
+}
+
+export async function deleteAttachment(id: string): Promise<void> {
+  await ensureFreshJwt();
+  const apiUrl = await getApiUrl();
+  const headers = await authHeaders();
+  const res = await fetch(`${apiUrl}/api/attachments/${id}`, { method: 'DELETE', headers });
+  if (!res.ok) throw new Error(`Could not delete attachment (${res.status})`);
+}
+
+export async function getAttachmentUrl(id: string): Promise<{ url: string; headers: Record<string, string> }> {
+  const apiUrl = await getApiUrl();
+  const expiresAt = await getJwtExpiresAt();
+  if (expiresAt && expiresAt - Date.now() <= 60_000) {
+    await refreshJwt();
+  }
+  const headers = await authHeaders();
+  return { url: `${apiUrl}/api/attachments/${id}/file`, headers };
+}
+
 export async function sync(): Promise<{ pushed: number; pulled: number }> {
   const jwt = await getJwtToken();
   if (!jwt) {

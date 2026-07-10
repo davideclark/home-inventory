@@ -38,7 +38,7 @@ Requirements and data model are documented in Notion (for reference only):
 - **Framework**: Next.js 15 + Tailwind CSS
 - **Data fetching**: TanStack Query
 - **API access**: proxy route (`app/api/proxy/[...path]/route.ts`) forwards all requests to backend, adding token server-side
-- **Pages**: Catalogues, Items per catalogue, Browse (hierarchy), Search, Settings
+- **Pages**: Catalogues, Items per catalogue, Browse (hierarchy), Valuation (insurance totals + CSV export), Search, Settings
 - **Fonts**: Manrope via `next/font/google` (self-hosted, CSS variable `--font-sans`), applied via `font-sans` Tailwind class
 - **Design system**: primary colour `#007AFF` as `bg-primary` / `hover:bg-primary-hover` / `active:bg-primary-active` in `tailwind.config.ts`; House-Box logo at `public/logo-mark.svg`
 - **Config**: `API_URL`, `JWT_SECRET` env vars — set via Docker Compose in prod, `.env.local` in dev
@@ -101,7 +101,9 @@ JWT_SECRET=<openssl rand -hex 32>
 ADMIN_USERNAME=<username>
 ADMIN_PASSWORD=<initial password — forced to change on first login>
 ```
-`SECURE_COOKIES=true` can be added if the web is served over HTTPS — omit it (or set to `false`) for plain HTTP (the default for the local NAS setup). Without this, browsers silently drop the session cookies and login appears to succeed but immediately loops back.
+`SECURE_COOKIES=true` can be added if the web is served over HTTPS — omit it (or set to `false`) for plain HTTP (the default for the local NAS setup). Without this, browsers silently drop the session cookies and login appears to succeed but immediately loops back. `docker-compose.yml` passes it through to the web container.
+
+**Self-hosting guide for other people**: `docs/SELF-HOSTING.md` — full walkthrough (amd64-only images, .env template, first run, backups, mobile app distribution options).
 `IMAGES_PATH` is the host path mounted into the API container at `/images`. The API reads `IMAGE_PATH=/images` (set in `docker-compose.yml`). The directory is created automatically on startup if it doesn't exist.
 
 **To rebuild and push the Docker image** (run from repo root):
@@ -154,7 +156,9 @@ app/
     [id].tsx               Edit Catalogue modal (also handles delete)
   new-item.tsx             Add Item modal (accepts catalogueId and/or parentId params)
   edit-item.tsx            Edit Item modal (catalogue picker to move between catalogues)
-  item-detail.tsx          Read-only item detail screen
+  item-detail.tsx          Read-only item detail screen + Photos & Receipts attachments section
+                           (online-only — hidden when server unreachable; tap to open via
+                           expo-file-system download + expo-sharing, long-press photo to delete)
   setup.tsx                One-time server setup screen (not shown on startup — accessible if needed)
 
 components/
@@ -196,6 +200,8 @@ sync.ts                    Sync logic: getDeviceId(), sync(), push(), pull()
                            Cleans up orphaned items before push.
 db.ts                      Drizzle db instance (expo-sqlite)
 schema.ts                  Drizzle schema — single source of truth for mobile DB
+fields.ts                  FieldDef type + parseFields/parseMoney/formatCurrency/formatFieldValue —
+                           the ONLY place FieldDef is defined on mobile; screens import from here
 drizzle/                   Generated migrations (do not edit manually)
 drizzle.config.ts          Drizzle Kit config (SQLite/expo)
 eas.json                   EAS Build config — preview profile for internal iOS distribution
@@ -222,9 +228,14 @@ docker-compose.dev.yml     PostgreSQL + API containers (local dev — builds fro
 
 web/
   app/
-    api/proxy/[...path]/   Next.js route handler — proxies all API calls server-side (adds token)
+    api/proxy/[...path]/   Next.js route handler — proxies all API calls server-side (adds token).
+                           Non-JSON responses (images, PDFs, ZIPs) pass through as binary with
+                           Content-Disposition forwarded — do not read them as text.
     catalogues/            Catalogue list + items per catalogue
     containers/            Container hierarchy (drill-down)
+    valuation/             Insurance valuation report — totals by catalogue + room (client-side
+                           aggregation over the isValue field), coverage input (localStorage
+                           key valuation-coverage-gbp), CSV export (BOM + quote-escaped)
     search/                Full-text search
     settings/              Connection status
   components/
@@ -236,10 +247,15 @@ web/
                            Each container option shows the full path as primary text and catalogue
                            names (or notes as fallback) as a subtitle. Uses an `allItems` query
                            (queryKey: ['items-by-parent']) to build the cataloguesByContainer map.
-    ItemDetailModal.tsx    Read-only item detail dialog — image (with lightbox), all spec fields, notes, location path; Edit button opens ItemModal
+                           Photos & Attachments section (edit mode): thumbnails + document rows
+                           with delete, single upload input accepting image/*,application/pdf.
+    ItemDetailModal.tsx    Read-only item detail dialog — hero image (with lightbox), all spec
+                           fields, notes, location path, Attachments section (extra photos grid
+                           + document links); Edit button opens ItemModal
   lib/
-    api.ts                 Fetch wrappers for all API endpoints
-    types.ts               TypeScript types mirroring server schema
+    api.ts                 Fetch wrappers for all API endpoints (incl. api.attachments)
+    format.ts              parseMoney / formatCurrency / formatFieldValue (GBP display helpers)
+    types.ts               TypeScript types mirroring server schema (FieldDef, ItemAttachment, …)
   public/
     logo-mark.svg          House-Box SVG logo (blue #007AFF, 64×64 viewBox, no background)
   Dockerfile               Builds web container (standalone Next.js output)
@@ -275,10 +291,11 @@ Modals (`item-detail`, `new-item`, `edit-item`, `catalogue/add`, `catalogue/[id]
 
 ## Data Model (`schema.ts`)
 
-Five tables:
+Five tables on mobile; the server adds `item_attachment`:
 
-- **`catalogue`** — groups items and defines custom spec fields for the group. Has `icon`, `description`, `sort_order`, `fields` (JSON array of `FieldDef` — custom per-catalogue spec field definitions, e.g. `[{ key: "speed_mhz", label: "Speed (MHz)", type: "number", showInList: true }]`). Types: `text | number | textarea`. `showInList` controls which spec fields appear as subtitles in item list rows (mobile) or dedicated columns (web catalogue items page). No structural flag — whether an item is a container is determined solely by `item.can_contain`.
-- **`item`** — entire physical hierarchy in one self-referencing table. `item_number` is nullable (containers/locations don't need a sticker). `parent_id` is a UUID self-ref. `spec` is a JSON blob for all catalogue-specific fields — **this includes manufacturer, model, type, condition, colour, barcode, and status**, which are stored in spec rather than dedicated columns. Keys are defined by the parent catalogue's `fields` array; data is preserved when moving an item between catalogues. `can_contain` is per-item. `has_image` boolean — true when a photo exists at `<IMAGE_PATH>/<id>.jpg` on the server. Images are served via `GET /api/items/:id/image` (token-protected). CHECK constraint: `can_contain = 1 OR parent_id IS NOT NULL`.
+- **`catalogue`** — groups items and defines custom spec fields for the group. Has `icon`, `description`, `sort_order`, `fields` (JSON array of `FieldDef` — custom per-catalogue spec field definitions, e.g. `[{ key: "speed_mhz", label: "Speed (MHz)", type: "number", showInList: true }]`). Types: `text | number | textarea | currency`. `showInList` controls which spec fields appear as subtitles in item list rows (mobile) or dedicated columns (web catalogue items page). `isValue` (allowed on `currency`/`number` fields, at most ONE per catalogue — editors enforce radio-style) marks the field whose values count toward insurance valuation totals on the web Valuation page. FieldDef is defined ONCE per client: mobile `fields.ts` (repo root — also exports `parseFields`, `parseMoney`, `formatCurrency`, `formatFieldValue`), web `web/lib/types.ts` (+ helpers in `web/lib/format.ts`). Do not re-declare local FieldDef copies in screens. No structural flag — whether an item is a container is determined solely by `item.can_contain`.
+- **`item`** — entire physical hierarchy in one self-referencing table. `item_number` is nullable (containers/locations don't need a sticker). `parent_id` is a UUID self-ref. `spec` is a JSON blob for all catalogue-specific fields — **this includes manufacturer, model, type, condition, colour, barcode, and status**, which are stored in spec rather than dedicated columns. Keys are defined by the parent catalogue's `fields` array; data is preserved when moving an item between catalogues. `can_contain` is per-item. `has_image` boolean — **derived** on the server: true when the item has ≥1 `photo` attachment (see `item_attachment` below); the server bumps `last_modified` when the flag flips so it syncs to mobile. CHECK constraint: `can_contain = 1 OR parent_id IS NOT NULL`.
+- **`item_attachment`** (server PostgreSQL ONLY — not in mobile SQLite, not synced) — unified store for ALL item files: photos and documents/receipts. Columns: `id`, `item_id` (FK, cascade), `kind` (`'photo' | 'document'`), `original_filename`, `mime_type`, `size`, `created_at`. Files live at `<IMAGE_PATH>/attachments/<attachmentId>.<ext>` (ext from a mime whitelist, never from the user filename). The item's "primary photo" (thumbnail) is the OLDEST photo attachment. Clients fetch attachment lists over the API on demand (online-only, like photos always were).
 - **`settings`** — key/value store for app-level state. Keys: `device_id`, `last_sync_at`, `api_url`, `api_token` (legacy), `jwt_token`, `jwt_expires_at`, `refresh_token`, `logged_in_username`.
 - **`sync_tombstone`** — records deletes so they propagate across devices. `entity_type` is `'catalogue' | 'item'`, `entity_id` is the UUID of the deleted record. Mobile adds `synced` boolean (SQLite); server schema omits it. Always delete via `deleteItem()`/`deleteCatalogue()`/`deleteContainer()` in `sync.ts` — never call `db.delete()` directly, or the tombstone won't be created.
 - **`sync_log`** — polymorphic audit trail. `entity_type` is `'catalogue' | 'item'`, `entity_id` is the UUID of the record. No DB-level FK — app-enforced.
@@ -347,10 +364,13 @@ All mutable tables carry `device_id`, `last_modified`, and `synced` for offline-
 - Security events are logged to stdout with a `[SECURITY]` prefix: `failed_login`, `login_blocked`, `rate_limit_hit`, `bad_jwt`, `no_token`. View with: `docker compose logs -t api | grep SECURITY`
 - `/api/discover` returns `{ name, version, requiresToken, imagePath }` — `requiresToken` is true when `JWT_SECRET` is set. `imagePath` is the host-side image folder path (from `IMAGES_PATH` env var) displayed in the web Settings page.
 - API runs migrations automatically on startup via `drizzle-orm/postgres-js/migrator`.
-- **Image endpoints**: `POST /api/items/:id/image` (upload), `GET /api/items/:id/image` (serve), `DELETE /api/items/:id/image` (remove). Files stored at `<IMAGE_PATH>/<id>.jpg`. `IMAGE_PATH` env var defaults to `./images`; in prod it is `/images` (mapped to Docker volume). All three are token-protected. Mobile uses `getImageUrl(itemId)` from `sync.ts` which returns `{ url, headers }` — headers come from `authHeaders()` (Bearer JWT). Pass headers directly to `ExpoImage` source prop.
+- **Attachment endpoints**: `GET /api/items/:id/attachments` (list), `POST /api/items/:id/attachments` (multipart `file` + optional `kind`; defaults to `photo` for `image/*` mimes), `GET /api/attachments/:id/file` (serve with Content-Disposition), `DELETE /api/attachments/:id`. All token-protected. `IMAGE_PATH` env var defaults to `./images`; in prod it is `/images` (mapped to Docker volume); attachment files under `<IMAGE_PATH>/attachments/`. Mobile helpers in `sync.ts`: `listAttachments`, `uploadAttachment`, `deleteAttachment`, `getAttachmentUrl` (same `{ url, headers }` shape as `getImageUrl`). Web: `api.attachments` in `web/lib/api.ts`. Mobile opens documents by downloading to cache via `expo-file-system/legacy` `downloadAsync` (Bearer headers) then `expo-sharing` `shareAsync` — a Bearer-protected URL can't be opened directly in a browser/QuickLook.
+- **Legacy image endpoints are compatibility shims** over the attachments store: `GET /api/items/:id/image` serves the primary photo (oldest photo attachment), `POST` creates a photo attachment, `DELETE` removes the primary photo. Old mobile builds and all existing thumbnail surfaces keep working unchanged. Do not remove these shims.
+- **Startup image migration** (`migrateLegacyImages()` in `api.ts` `main()`): idempotent, runs every boot — moves legacy `<IMAGE_PATH>/<itemId>.jpg` files into the attachments store (createdAt = file mtime so the migrated photo stays primary). Items flagged `hasImage` with no file are only warned about, deliberately never auto-repaired — clearing flags would mass-wipe photo metadata if the images volume failed to mount. Logs `[MIGRATE] images→attachments: …`.
+- **Item file cleanup**: `deleteItemFiles(itemId)` unlinks all attachment files + rows and any legacy `<id>.jpg`. Called from EVERY item-delete path: `DELETE /api/items/:id` (incl. cascade/moveUp branches), catalogue delete (non-keepItems), sync-push item tombstones (mobile-originated deletes), and restore. When adding a new delete path, call it there too.
 - **Parent IDs endpoint**: `GET /api/items/parent-ids` returns a `string[]` of all distinct `parentId` values. Must be registered before `GET /api/items/:id` in the route order. Used by `web/app/catalogues/[id]/page.tsx` for the Browse Contents button. **`web/app/containers/page.tsx` and `web/app/containers/[id]/page.tsx` do NOT use this endpoint** — they compute `parentIdSet` locally from the `allLeafItems` query (queryKey: `['items-by-parent']`) which they already fetch for the catalogue-names subtitle. Do not revert this to the API endpoint approach — computing locally is more reliable and removes a network dependency.
 - **Browse Contents button** (web): appears on container rows in `containers/page.tsx`, `containers/[id]/page.tsx`, and `catalogues/[id]/page.tsx`. The button row div must have `shrink-0` (so it isn't squeezed by the name column) and the button itself must have `whitespace-nowrap` (so "Browse Contents" never wraps to a second line). Do not remove these classes.
-- **Backup/restore**: `GET /api/backup` returns a ZIP containing `data.json` (all catalogues + items) + `images/<id>.jpg` for each item with a photo. `POST /api/restore` accepts a multipart ZIP upload and does a full wipe-and-replace (sync_log → sync_tombstone → items → catalogues → image files, then reimports). Uses `jszip`. Exposed via web Settings page (Export Backup / Import Backup buttons).
+- **Backup/restore**: `GET /api/backup` returns a ZIP — `data.json` (version **2**: catalogues, items, attachments incl. computed `ext`) + `attachments/<id>.<ext>` files. `POST /api/restore` accepts a multipart ZIP and does a full wipe-and-replace (sync_log → sync_tombstone → item_attachment → items → catalogues → all image/attachment files, then reimports). **v1 ZIPs still restore**: their `images/<itemId>.jpg` entries are converted into photo attachments on import. Rejects version > 2. Uses `jszip`. Exposed via web Settings page (Export Backup / Import Backup buttons).
 
 ## MCP Servers
 

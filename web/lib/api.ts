@@ -59,4 +59,16 @@ export const api = {
       req(`items/${id}/image`, { method: 'DELETE' }),
     url: (id: string) => `${BASE}/items/${id}/image`,
   },
+  attachments: {
+    list: <T = unknown>(itemId: string) => req<T>(`items/${itemId}/attachments`),
+    upload: <T = unknown>(itemId: string, file: File, kind?: 'photo' | 'document'): Promise<T> => {
+      const form = new FormData();
+      form.append('file', file);
+      if (kind) form.append('kind', kind);
+      return req<T>(`items/${itemId}/attachments`, { method: 'POST', body: form });
+    },
+    delete: (id: string): Promise<{ ok: boolean }> =>
+      req(`attachments/${id}`, { method: 'DELETE' }),
+    url: (id: string) => `${BASE}/attachments/${id}/file`,
+  },
 };

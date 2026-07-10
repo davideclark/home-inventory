@@ -32,12 +32,15 @@ async function proxy(req: NextRequest, path: string[]): Promise<NextResponse> {
 
   const upstream = await fetch(target, { method: req.method, headers, body });
 
-  if (isMultipart || upstream.headers.get('content-type')?.includes('image/') || upstream.headers.get('content-type')?.includes('application/zip')) {
+  // Pass anything that isn't JSON through as binary (images, PDFs, ZIPs, …) —
+  // reading it as text corrupts it.
+  const upstreamType = upstream.headers.get('content-type') ?? '';
+  if (isMultipart || (upstreamType && !upstreamType.includes('application/json') && !upstreamType.includes('text/'))) {
     const buf = await upstream.arrayBuffer();
-    return new NextResponse(buf, {
-      status: upstream.status,
-      headers: { 'Content-Type': upstream.headers.get('content-type') ?? 'application/octet-stream' },
-    });
+    const responseHeaders: Record<string, string> = { 'Content-Type': upstreamType || 'application/octet-stream' };
+    const disposition = upstream.headers.get('content-disposition');
+    if (disposition) responseHeaders['Content-Disposition'] = disposition;
+    return new NextResponse(buf, { status: upstream.status, headers: responseHeaders });
   }
 
   const text = await upstream.text();

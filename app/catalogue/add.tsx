@@ -11,8 +11,7 @@ import { catalogue } from '../../schema';
 import { getDeviceId } from '../../sync';
 import CatalogueIcon from '../../components/CatalogueIcon';
 import IconPicker from '../../components/IconPicker';
-
-type FieldDef = { key: string; label: string; type: 'text' | 'number' | 'textarea' };
+import type { FieldDef } from '../../fields';
 
 function toKey(label: string): string {
   return label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 50);
@@ -52,12 +51,15 @@ export default function AddCatalogueScreen() {
   function removeField(i: number) {
     setFields(prev => prev.filter((_, j) => j !== i));
   }
-  function updateField(i: number, k: keyof FieldDef, value: string) {
+  function updateField(i: number, k: keyof FieldDef, value: string | boolean) {
     setFields(prev => {
-      const next = [...prev];
+      // Only one field per catalogue may count toward valuation totals
+      const next = k === 'isValue' && value === true
+        ? prev.map(f => ({ ...f, isValue: false }))
+        : [...prev];
       const old = next[i];
       const updated = { ...old, [k]: value } as FieldDef;
-      if (k === 'label' && old.key === toKey(old.label)) updated.key = toKey(value);
+      if (k === 'label' && typeof value === 'string' && old.key === toKey(old.label)) updated.key = toKey(value);
       next[i] = updated;
       return next;
     });
@@ -181,7 +183,7 @@ export default function AddCatalogueScreen() {
               </View>
               <Text style={styles.fieldKey}>{field.key || '—'}</Text>
               <View style={styles.typeChips}>
-                {(['text', 'number', 'textarea'] as const).map(t => (
+                {(['text', 'number', 'textarea', 'currency'] as const).map(t => (
                   <Pressable
                     key={t}
                     style={[styles.typeChip, field.type === t && styles.typeChipActive]}
@@ -191,6 +193,18 @@ export default function AddCatalogueScreen() {
                   </Pressable>
                 ))}
               </View>
+              <Pressable onPress={() => updateField(i, 'showInList', !field.showInList)} style={styles.fieldToggle}>
+                <Text style={field.showInList ? styles.toggleOn : styles.toggleOff}>
+                  {field.showInList ? '✓ Show in list' : '○ Show in list'}
+                </Text>
+              </Pressable>
+              {(field.type === 'currency' || field.type === 'number') && (
+                <Pressable onPress={() => updateField(i, 'isValue', !field.isValue)} style={styles.fieldToggle}>
+                  <Text style={field.isValue ? styles.toggleOn : styles.toggleOff}>
+                    {field.isValue ? '✓ Counts toward valuation' : '○ Counts toward valuation'}
+                  </Text>
+                </Pressable>
+              )}
             </View>
           ))}
         </View>
@@ -320,4 +334,7 @@ const styles = StyleSheet.create({
   typeChipActive: { backgroundColor: '#007AFF', borderColor: '#007AFF' },
   typeChipText: { fontSize: 12, color: '#555' },
   typeChipTextActive: { color: '#fff', fontWeight: '600' },
+  fieldToggle: { marginTop: 6 },
+  toggleOn: { fontSize: 12, color: '#007AFF', fontWeight: '600' },
+  toggleOff: { fontSize: 12, color: '#aaa' },
 });

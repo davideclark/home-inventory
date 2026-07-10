@@ -4,7 +4,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Modal from './Modal';
 import IconRenderer from './IconRenderer';
 import { api } from '../lib/api';
-import type { Catalogue, FieldDef, Item } from '../lib/types';
+import { parseMoney } from '../lib/format';
+import type { Catalogue, FieldDef, Item, ItemAttachment } from '../lib/types';
 
 type Form = {
   name: string;
@@ -46,12 +47,16 @@ export default function ItemModal({ item, defaultCatalogueId, defaultParentId, d
   const [catalogueOpen, setCatalogueOpen] = useState(false);
   const [containerOpen, setContainerOpen] = useState(false);
   const [specValues, setSpecValues] = useState<Record<string, string>>({});
-  const [imageKey, setImageKey] = useState(0);
   const [imageUploading, setImageUploading] = useState(false);
-  const [hasImage, setHasImage] = useState(item?.hasImage ?? false);
-  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const catalogueRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  const { data: attachments = [] } = useQuery<ItemAttachment[]>({
+    queryKey: ['attachments', item?.id],
+    queryFn: () => api.attachments.list<ItemAttachment[]>(item!.id),
+    enabled: isEdit,
+  });
 
   const { data: catalogues = [] } = useQuery({
     queryKey: ['catalogues'],
@@ -155,6 +160,9 @@ export default function ItemModal({ item, defaultCatalogueId, defaultParentId, d
         const val = specValues[field.key] ?? '';
         if (val === '') {
           delete specToSave[field.key];
+        } else if (field.type === 'currency') {
+          const n = parseMoney(val);
+          if (n != null) specToSave[field.key] = n; else delete specToSave[field.key];
         } else {
           specToSave[field.key] = field.type === 'number' ? Number(val) : val;
         }
@@ -332,67 +340,82 @@ export default function ItemModal({ item, defaultCatalogueId, defaultParentId, d
             className="input resize-none" rows={3} />
         </div>
 
-        {/* Photo */}
+        {/* Photos & attachments */}
         <div>
-          <label className="block text-xs font-medium text-gray-500 mb-2">Photo</label>
+          <label className="block text-xs font-medium text-gray-500 mb-2">Photos &amp; Attachments</label>
           {isEdit && item ? (
-            <div className="flex items-center gap-3">
-              {hasImage && (
-                <>
-                  <img
-                    key={imageKey}
-                    src={`${api.images.url(item.id)}?t=${imageKey}`}
-                    alt="Item photo"
-                    className="w-16 h-16 rounded-lg object-cover border border-gray-200 cursor-zoom-in"
-                    onClick={() => setLightboxOpen(true)}
-                  />
-                  {lightboxOpen && (
-                    <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center" onClick={() => setLightboxOpen(false)}>
-                      <img src={`${api.images.url(item.id)}?t=${imageKey}`} alt="" className="max-w-[90vw] max-h-[90vh] rounded-lg object-contain" onClick={e => e.stopPropagation()} />
+            <div className="space-y-2">
+              {attachments.filter(a => a.kind === 'photo').length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {attachments.filter(a => a.kind === 'photo').map(a => (
+                    <div key={a.id} className="relative group/photo">
+                      <img
+                        src={api.attachments.url(a.id)}
+                        alt={a.originalFilename}
+                        className="w-16 h-16 rounded-lg object-cover border border-gray-200 cursor-zoom-in"
+                        onClick={() => setLightboxUrl(api.attachments.url(a.id))}
+                      />
+                      <button
+                        type="button"
+                        title="Remove photo"
+                        className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-gray-700 text-white text-xs leading-none hidden group-hover/photo:flex items-center justify-center"
+                        onClick={async () => {
+                          await api.attachments.delete(a.id);
+                          qc.invalidateQueries({ queryKey: ['attachments', item.id] });
+                          qc.invalidateQueries({ queryKey: ['items'] });
+                        }}
+                      >
+                        ✕
+                      </button>
                     </div>
-                  )}
-                </>
+                  ))}
+                </div>
               )}
-              <div className="flex flex-col gap-1">
-                <label className={`btn-sm cursor-pointer ${imageUploading ? 'opacity-50 pointer-events-none' : ''}`}>
-                  {imageUploading ? 'Uploading…' : hasImage ? 'Change photo' : 'Add photo'}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={async (e) => {
-                      const file = e.target.files?.[0];
-                      if (!file) return;
-                      setImageUploading(true);
-                      try {
-                        await api.images.upload(item.id, file);
-                        setHasImage(true);
-                        setImageKey(k => k + 1);
-                        qc.invalidateQueries({ queryKey: ['items'] });
-                      } catch { /* ignore */ }
-                      finally { setImageUploading(false); }
-                      e.target.value = '';
-                    }}
-                  />
-                </label>
-                {hasImage && (
+              {lightboxUrl && (
+                <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center" onClick={() => setLightboxUrl(null)}>
+                  <img src={lightboxUrl} alt="" className="max-w-[90vw] max-h-[90vh] rounded-lg object-contain" onClick={e => e.stopPropagation()} />
+                </div>
+              )}
+              {attachments.filter(a => a.kind === 'document').map(a => (
+                <div key={a.id} className="flex items-center gap-2 text-sm">
+                  <a href={api.attachments.url(a.id)} target="_blank" rel="noreferrer" className="text-blue-500 hover:underline truncate">
+                    📄 {a.originalFilename}
+                  </a>
                   <button
                     type="button"
-                    className="btn-sm-danger"
+                    className="text-gray-400 hover:text-red-500 text-xs shrink-0"
                     onClick={async () => {
-                      await api.images.delete(item.id);
-                      setHasImage(false);
-                      setImageKey(k => k + 1);
-                      qc.invalidateQueries({ queryKey: ['items'] });
+                      await api.attachments.delete(a.id);
+                      qc.invalidateQueries({ queryKey: ['attachments', item.id] });
                     }}
                   >
-                    Remove photo
+                    ✕
                   </button>
-                )}
-              </div>
+                </div>
+              ))}
+              <label className={`btn-sm cursor-pointer inline-block ${imageUploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                {imageUploading ? 'Uploading…' : '+ Add photo or document'}
+                <input
+                  type="file"
+                  accept="image/*,application/pdf"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    setImageUploading(true);
+                    try {
+                      await api.attachments.upload(item.id, file);
+                      qc.invalidateQueries({ queryKey: ['attachments', item.id] });
+                      qc.invalidateQueries({ queryKey: ['items'] });
+                    } catch { /* ignore */ }
+                    finally { setImageUploading(false); }
+                    e.target.value = '';
+                  }}
+                />
+              </label>
             </div>
           ) : (
-            <p className="text-xs text-gray-400">Save item first to add a photo.</p>
+            <p className="text-xs text-gray-400">Save item first to add photos or documents.</p>
           )}
         </div>
 
@@ -413,6 +436,18 @@ export default function ItemModal({ item, defaultCatalogueId, defaultParentId, d
                         onChange={e => setSpecValues(prev => ({ ...prev, [field.key]: e.target.value }))}
                         className="input resize-none" rows={2}
                       />
+                    ) : field.type === 'currency' ? (
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">£</span>
+                        <input
+                          type="text"
+                          value={specValues[field.key] ?? ''}
+                          onChange={e => setSpecValues(prev => ({ ...prev, [field.key]: e.target.value }))}
+                          className="input pl-7"
+                          inputMode="decimal"
+                          placeholder="0.00"
+                        />
+                      </div>
                     ) : (
                       <input
                         type={field.type === 'number' ? 'number' : 'text'}

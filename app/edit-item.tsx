@@ -13,8 +13,7 @@ import { db } from '../db';
 import { item, catalogue } from '../schema';
 import { getDeviceId, deleteItem, uploadItemImage, deleteItemImage, getImageUrl } from '../sync';
 import CatalogueIcon from '../components/CatalogueIcon';
-
-type FieldDef = { key: string; label: string; type: 'text' | 'number' | 'textarea' };
+import { type FieldDef, parseFields, parseMoney } from '../fields';
 
 type ContainerRecord = { id: string; name: string; parentId: string | null; notes: string | null };
 
@@ -170,10 +169,7 @@ export default function EditItemScreen() {
     }
     setSaving(true);
     try {
-      const selectedCatFields: FieldDef[] = (() => {
-        const cat = catalogues?.find(c => c.id === catalogueId);
-        try { return cat?.fields ? JSON.parse(cat.fields) : []; } catch { return []; }
-      })();
+      const selectedCatFields = parseFields(catalogues?.find(c => c.id === catalogueId)?.fields);
       // Merge: preserve existing spec keys, overwrite with current catalogue's fields
       const existingSpec: Record<string, string | number> = (() => {
         try { return existing?.spec ? JSON.parse(existing.spec) : {}; } catch { return {}; }
@@ -183,6 +179,9 @@ export default function EditItemScreen() {
         const val = spec[field.key] ?? '';
         if (val === '') {
           delete specToSave[field.key];
+        } else if (field.type === 'currency') {
+          const n = parseMoney(val);
+          if (n != null) specToSave[field.key] = n; else delete specToSave[field.key];
         } else {
           specToSave[field.key] = field.type === 'number' ? Number(val) : val;
         }
@@ -403,21 +402,19 @@ export default function EditItemScreen() {
 
         {/* Custom spec fields */}
         {(() => {
-          const cat = catalogues?.find(c => c.id === catalogueId);
-          let catFields: FieldDef[] = [];
-          try { catFields = cat?.fields ? JSON.parse(cat.fields) : []; } catch { catFields = []; }
+          const catFields: FieldDef[] = parseFields(catalogues?.find(c => c.id === catalogueId)?.fields);
           if (catFields.length === 0) return null;
           return (
             <View style={styles.section}>
               <Text style={styles.label}>Custom Fields</Text>
               {catFields.map(field => (
                 <View key={field.key}>
-                  <Text style={[styles.label, styles.mt]}>{field.label}</Text>
+                  <Text style={[styles.label, styles.mt]}>{field.label}{field.type === 'currency' ? ' (£)' : ''}</Text>
                   <TextInput
                     style={[styles.input, field.type === 'textarea' && styles.multiline]}
                     value={spec[field.key] ?? ''}
                     onChangeText={val => setSpec(prev => ({ ...prev, [field.key]: val }))}
-                    keyboardType={field.type === 'number' ? 'numeric' : 'default'}
+                    keyboardType={field.type === 'number' ? 'numeric' : field.type === 'currency' ? 'decimal-pad' : 'default'}
                     multiline={field.type === 'textarea'}
                     numberOfLines={field.type === 'textarea' ? 3 : 1}
                     textAlignVertical={field.type === 'textarea' ? 'top' : 'auto'}
