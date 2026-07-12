@@ -10,6 +10,7 @@ import { catalogue, item } from '../../../../schema';
 import type { Item } from '../../../../schema';
 import { deleteItem } from '../../../../sync';
 import { type FieldDef, parseFields, formatFieldValue } from '../../../../fields';
+import { hapticLight } from '../../../../haptics';
 
 export default function ItemListScreen() {
   const { catalogueId } = useLocalSearchParams<{ catalogueId: string }>();
@@ -149,7 +150,7 @@ function ItemRow({ item: i, containerMap, showInListFields }: { item: Item; cont
   }
 
   return (
-    <Swipeable ref={swipeRef} renderRightActions={renderRightActions} friction={2}>
+    <Swipeable ref={swipeRef} renderRightActions={renderRightActions} friction={2} onSwipeableWillOpen={hapticLight}>
       <Pressable
         style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
         onPress={() => i.canContain

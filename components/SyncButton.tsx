@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ActivityIndicator, Alert, Pressable } from 'react-native';
 import { Text } from './Text';
 import { sync } from '../sync';
+import { hapticSuccess, hapticError } from '../haptics';
 
 export default function SyncButton() {
   const [syncing, setSyncing] = useState(false);
@@ -13,9 +14,11 @@ export default function SyncButton() {
     setHasError(false);
     try {
       const { pushed, pulled } = await sync();
+      hapticSuccess();
       Alert.alert('Synced', `↑ ${pushed} pushed  ↓ ${pulled} pulled`);
     } catch (e) {
       setHasError(true);
+      hapticError();
       Alert.alert('Sync failed', e instanceof Error ? e.message : String(e));
     } finally {
       setSyncing(false);

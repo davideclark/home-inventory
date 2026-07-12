@@ -14,6 +14,7 @@ import { deleteCatalogue } from '../../sync';
 import CatalogueIcon from '../../components/CatalogueIcon';
 import IconPicker from '../../components/IconPicker';
 import type { FieldDef } from '../../fields';
+import { hapticSuccess, hapticSelect } from '../../haptics';
 
 function toKey(label: string): string {
   return label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 50);
@@ -110,6 +111,7 @@ export default function EditCatalogueScreen() {
           synced: false,
         })
         .where(eq(catalogue.id, id));
+      hapticSuccess();
       router.back();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -250,19 +252,19 @@ export default function EditCatalogueScreen() {
                   <Pressable
                     key={t}
                     style={[styles.typeChip, field.type === t && styles.typeChipActive]}
-                    onPress={() => updateField(i, 'type', t)}
+                    onPress={() => { hapticSelect(); updateField(i, 'type', t); }}
                   >
                     <Text style={[styles.typeChipText, field.type === t && styles.typeChipTextActive]}>{t}</Text>
                   </Pressable>
                 ))}
               </View>
-              <Pressable onPress={() => updateField(i, 'showInList', !field.showInList)} style={styles.showInListToggle}>
+              <Pressable onPress={() => { hapticSelect(); updateField(i, 'showInList', !field.showInList); }} style={styles.showInListToggle}>
                 <Text style={field.showInList ? styles.toggleOn : styles.toggleOff}>
                   {field.showInList ? '✓ Show in list' : '○ Show in list'}
                 </Text>
               </Pressable>
               {(field.type === 'currency' || field.type === 'number') && (
-                <Pressable onPress={() => updateField(i, 'isValue', !field.isValue)} style={styles.showInListToggle}>
+                <Pressable onPress={() => { hapticSelect(); updateField(i, 'isValue', !field.isValue); }} style={styles.showInListToggle}>
                   <Text style={field.isValue ? styles.toggleOn : styles.toggleOff}>
                     {field.isValue ? '✓ Counts toward valuation' : '○ Counts toward valuation'}
                   </Text>
@@ -295,7 +297,7 @@ export default function EditCatalogueScreen() {
       <IconPicker
         value={icon}
         visible={pickerVisible}
-        onSelect={setIcon}
+        onSelect={v => { hapticSelect(); setIcon(v); }}
         onClose={() => setPickerVisible(false)}
       />
     </>

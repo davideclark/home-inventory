@@ -10,6 +10,7 @@ import { item, catalogue } from '../schema';
 import { deleteItem, deleteContainer } from '../sync';
 import CatalogueIcon from './CatalogueIcon';
 import { parseFields, formatFieldValue } from '../fields';
+import { hapticLight } from '../haptics';
 
 function naturalSort(a: string, b: string): number {
   const re = /(\d+)/g;
@@ -299,7 +300,7 @@ function ContainerRow({ child: c, containerMap, cataloguesByContainer, container
   }
 
   return (
-    <Swipeable ref={swipeRef} renderRightActions={renderRightActions} friction={2}>
+    <Swipeable ref={swipeRef} renderRightActions={renderRightActions} friction={2} onSwipeableWillOpen={hapticLight}>
       <Pressable
         style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
         onPress={() => router.push({ pathname: containerRoute as any, params: { itemId: c.id } })}
@@ -359,7 +360,7 @@ function ItemRow({ child: i, containerMap }: { child: Child; containerMap: Conta
   }
 
   return (
-    <Swipeable ref={swipeRef} renderRightActions={renderRightActions} friction={2}>
+    <Swipeable ref={swipeRef} renderRightActions={renderRightActions} friction={2} onSwipeableWillOpen={hapticLight}>
       <Pressable
         style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
         onPress={() => router.push({ pathname: '/item-detail', params: { itemId: i.id } })}

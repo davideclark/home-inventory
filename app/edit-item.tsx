@@ -14,6 +14,7 @@ import { item, catalogue } from '../schema';
 import { getDeviceId, deleteItem, uploadItemImage, deleteItemImage, getImageUrl } from '../sync';
 import CatalogueIcon from '../components/CatalogueIcon';
 import { type FieldDef, parseFields, parseMoney } from '../fields';
+import { hapticSuccess, hapticSelect } from '../haptics';
 
 type ContainerRecord = { id: string; name: string; parentId: string | null; notes: string | null };
 
@@ -201,6 +202,7 @@ export default function EditItemScreen() {
           deviceId: await getDeviceId(),
         })
         .where(eq(item.id, itemId));
+      hapticSuccess();
       router.back();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -227,6 +229,7 @@ export default function EditItemScreen() {
       setImageUrl(url);
       setImageHeaders(headers);
       await uploadItemImage(itemId, uri);
+      hapticSuccess();
       setHasImage(true);
       setImageCacheBuster(v => v + 1);
     } catch (e) {
@@ -480,6 +483,7 @@ export default function EditItemScreen() {
               <Pressable
                 style={[styles.pickerRow, catalogueId === c.id && styles.pickerRowSelected]}
                 onPress={() => {
+                  hapticSelect();
                   setCatalogueId(c.id);
                   setCatalogueLabel(c.name);
                   setCataloguePickerVisible(false);
@@ -521,6 +525,7 @@ export default function EditItemScreen() {
                 <Pressable
                   style={[styles.pickerRow, parentId === c.id && styles.pickerRowSelected]}
                   onPress={() => {
+                    hapticSelect();
                     setParentId(c.id);
                     setParentLabel(buildPath(c.id, containerMap));
                     setPickerVisible(false);

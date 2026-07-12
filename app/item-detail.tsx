@@ -5,6 +5,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
+import { hapticMedium, hapticSuccess } from '../haptics';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
 import { useMemo, useEffect, useState, useCallback } from 'react';
 import { eq } from 'drizzle-orm';
@@ -100,6 +101,7 @@ export default function ItemDetailScreen() {
     setAttachmentBusy(true);
     try {
       await uploadAttachment(itemId, file, kind);
+      hapticSuccess();
       await loadAttachments();
     } catch (e) {
       Alert.alert('Upload failed', e instanceof Error ? e.message : String(e));
@@ -288,7 +290,14 @@ export default function ItemDetailScreen() {
                 {/* Server orders primary-first, so index 0 is the current thumbnail */}
                 {attachments.filter(a => a.kind === 'photo').map((a, idx) => (
                   photoSrcs[a.id] ? (
-                    <Pressable key={a.id} onPress={() => openAttachment(a)} onLongPress={() => photoOptions(a, idx === 0)}>
+                    <Pressable
+                      key={a.id}
+                      onPress={() => openAttachment(a)}
+                      onLongPress={() => {
+                        hapticMedium();
+                        photoOptions(a, idx === 0);
+                      }}
+                    >
                       <ExpoImage source={photoSrcs[a.id]} style={[styles.attachmentThumb, idx === 0 && styles.attachmentThumbPrimary]} contentFit="cover" />
                       {idx === 0 && (
                         <View style={styles.primaryBadge}>

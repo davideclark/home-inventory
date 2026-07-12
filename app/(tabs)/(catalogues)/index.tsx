@@ -10,6 +10,7 @@ import { catalogue, item } from '../../../schema';
 import type { Catalogue } from '../../../schema';
 import { deleteCatalogue } from '../../../sync';
 import CatalogueIcon from '../../../components/CatalogueIcon';
+import { hapticLight } from '../../../haptics';
 
 export default function CataloguesScreen() {
   const { data: catalogues } = useLiveQuery(
@@ -103,7 +104,7 @@ function CatalogueRow({ catalogue: cat }: { catalogue: Catalogue }) {
   }
 
   return (
-    <Swipeable ref={swipeRef} renderRightActions={renderRightActions} friction={2}>
+    <Swipeable ref={swipeRef} renderRightActions={renderRightActions} friction={2} onSwipeableWillOpen={hapticLight}>
       <Pressable
         style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
         onPress={() => router.push(`/items/${cat.id}`)}
