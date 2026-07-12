@@ -1,6 +1,6 @@
 {
   "name": "home-inventory-server",
-  "version": "1.8.0",
+  "version": "1.8.1",
   "private": true,
   "scripts": {
     "dev": "tsx src/api.ts",

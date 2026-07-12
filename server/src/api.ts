@@ -81,32 +81,44 @@ async function deleteItemFiles(itemId: string): Promise<void> {
   await db.delete(itemAttachment).where(eq(itemAttachment.itemId, itemId));
 }
 
-// One-time (idempotent) startup migration: move legacy <itemId>.jpg files into
-// the unified attachments store. createdAt uses the file's mtime so a migrated
-// photo remains the oldest (primary). Items flagged hasImage with no file are
-// only WARNED about, never repaired — auto-clearing the flag would mass-wipe
-// photo metadata (and sync it to every device) if the images volume ever
-// failed to mount or the API were pointed at the wrong IMAGE_PATH.
+// Convert one legacy <itemId>.jpg into a photo attachment, if both the file
+// and the item row exist. createdAt uses the file's mtime so the converted
+// photo sorts as the oldest (primary). Idempotent: the file is renamed away
+// on conversion. Legacy files also appear when a photo is uploaded for an
+// item the server doesn't know yet (add-item flow uploads before save/sync) —
+// conversion happens once the item arrives (sync push / attachment listing /
+// startup).
+async function migrateOneLegacyImage(itemId: string): Promise<boolean> {
+  const legacy = join(IMAGE_PATH, `${itemId}.jpg`);
+  if (!existsSync(legacy)) return false;
+  const [it] = await db.select({ id: item.id }).from(item).where(eq(item.id, itemId)).limit(1);
+  if (!it) return false;
+  const st = statSync(legacy);
+  const attId = randomUUID();
+  renameSync(legacy, join(ATTACHMENTS_DIR, `${attId}.jpg`));
+  await db.insert(itemAttachment).values({
+    id: attId, itemId, kind: 'photo', originalFilename: 'photo.jpg',
+    mimeType: 'image/jpeg', size: st.size, createdAt: st.mtime.toISOString(),
+  });
+  return true;
+}
+
+// Startup migration: move all legacy <itemId>.jpg files into the unified
+// attachments store. Items flagged hasImage with no file are only WARNED
+// about, never repaired — auto-clearing the flag would mass-wipe photo
+// metadata (and sync it to every device) if the images volume ever failed to
+// mount or the API were pointed at the wrong IMAGE_PATH.
 async function migrateLegacyImages(): Promise<void> {
   mkdirSync(ATTACHMENTS_DIR, { recursive: true });
   const flagged = await db.select({ id: item.id }).from(item).where(eq(item.hasImage, true));
   let migrated = 0, missing = 0;
   for (const it of flagged) {
-    const [existingPhoto] = await db.select({ id: itemAttachment.id }).from(itemAttachment)
-      .where(and(eq(itemAttachment.itemId, it.id), eq(itemAttachment.kind, 'photo'))).limit(1);
-    if (existingPhoto) continue;
-    const legacy = join(IMAGE_PATH, `${it.id}.jpg`);
-    if (existsSync(legacy)) {
-      const st = statSync(legacy);
-      const attId = randomUUID();
-      renameSync(legacy, join(ATTACHMENTS_DIR, `${attId}.jpg`));
-      await db.insert(itemAttachment).values({
-        id: attId, itemId: it.id, kind: 'photo', originalFilename: 'photo.jpg',
-        mimeType: 'image/jpeg', size: st.size, createdAt: st.mtime.toISOString(),
-      });
+    if (await migrateOneLegacyImage(it.id)) {
       migrated++;
-    } else {
-      missing++;
+    } else if (!existsSync(join(IMAGE_PATH, `${it.id}.jpg`))) {
+      const [existingPhoto] = await db.select({ id: itemAttachment.id }).from(itemAttachment)
+        .where(and(eq(itemAttachment.itemId, it.id), eq(itemAttachment.kind, 'photo'))).limit(1);
+      if (!existingPhoto) missing++;
     }
   }
   console.log(`[MIGRATE] images→attachments: ${migrated} migrated${missing ? `, ${missing} flagged items have no image file (left untouched — check IMAGE_PATH)` : ''}`);
@@ -528,6 +540,7 @@ app.delete('/api/items/:id', async (c) => {
 
 // Ordered primary-first — clients rely on the first photo being the thumbnail
 app.get('/api/items/:id/attachments', async (c) => {
+  await migrateOneLegacyImage(c.req.param('id')); // convert any stashed pre-save upload
   const rows = await db.select().from(itemAttachment)
     .where(eq(itemAttachment.itemId, c.req.param('id')))
     .orderBy(desc(itemAttachment.isPrimary), asc(itemAttachment.createdAt));
@@ -599,7 +612,15 @@ app.post('/api/items/:id/image', async (c) => {
   const file = body['file'];
   if (!file || typeof file === 'string') return c.json({ error: 'No file provided' }, 400);
   const buf = Buffer.from(await file.arrayBuffer());
-  await createAttachment(id, buf, file.type || 'image/jpeg', file.name || 'photo.jpg', 'photo');
+  const [it] = await db.select({ id: item.id }).from(item).where(eq(item.id, id)).limit(1);
+  if (it) {
+    await createAttachment(id, buf, file.type || 'image/jpeg', file.name || 'photo.jpg', 'photo');
+  } else {
+    // Item not on the server yet — the add-item flow uploads the photo before
+    // the item is saved/synced. Stash as a legacy file; migrateOneLegacyImage
+    // converts it into an attachment once the item arrives.
+    writeFileSync(join(IMAGE_PATH, `${id}.jpg`), buf);
+  }
   return c.json({ ok: true });
 });
 
@@ -804,6 +825,9 @@ app.post('/api/sync/push', async (c) => {
         throw err;
       }
     }
+    // Convert any photo stashed before this item existed (add-item flow
+    // uploads the photo before the item record is saved/synced)
+    await migrateOneLegacyImage(itemId);
   }
 
   return c.json({ ok: true, catalogues: cats.length, items: its.length, tombstones: tombstonesIn.length, numbersCleared, skipped });
