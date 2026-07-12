@@ -1,4 +1,4 @@
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { db } from './db';
 import { catalogue, item, settings, syncTombstone } from './schema';
 
@@ -265,12 +265,18 @@ async function push(): Promise<PushResult> {
   const deviceId = await getDeviceId();
   const now = isoNow();
 
-  await db.run(
-    sql`DELETE FROM item
-        WHERE synced = 0
-          AND catalogue_id IS NOT NULL
-          AND catalogue_id NOT IN (SELECT id FROM catalogue)`
+  // Clean up locally-modified items whose catalogue no longer exists (prevents
+  // FK violations on the server). Tombstone them first so the delete propagates —
+  // a bare delete would let the item resurrect from the server on the next pull.
+  const orphans = await db.select({ id: item.id }).from(item).where(
+    sql`synced = 0 AND catalogue_id IS NOT NULL AND catalogue_id NOT IN (SELECT id FROM catalogue)`
   );
+  for (const o of orphans) {
+    await db.insert(syncTombstone).values({
+      entityType: 'item', entityId: o.id, deletedAt: now, deviceId, synced: false,
+    });
+    await db.delete(item).where(eq(item.id, o.id));
+  }
 
   const [unsyncedCats, unsyncedItems, unsyncedTombstones] = await Promise.all([
     db.select().from(catalogue).where(eq(catalogue.synced, false)),
@@ -287,12 +293,17 @@ async function push(): Promise<PushResult> {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...await authHeaders() },
     body: JSON.stringify({
-      catalogues: unsyncedCats.map(c => ({ ...c, deviceId, lastModified: now })),
+      // Preserve each record's own edit-time lastModified — overwriting it with the
+      // push time would make "last to sync" win instead of "last to edit" (LWW).
+      catalogues: unsyncedCats.map(c => ({
+        ...c,
+        fields: c.fields ? JSON.parse(c.fields) : null,
+        deviceId,
+      })),
       items: unsyncedItems.map(i => ({
         ...i,
         spec: i.spec ? JSON.parse(i.spec) : null,
         deviceId,
-        lastModified: now,
       })),
       tombstones: unsyncedTombstones,
     }),
@@ -300,12 +311,17 @@ async function push(): Promise<PushResult> {
 
   if (!res.ok) throw new Error(`Push failed: ${res.status}`);
 
+  // Mark only the exact rows we pushed as synced. Scoping on the unchanged
+  // lastModified means an edit made *during* the fetch (which reset synced=false
+  // with a newer timestamp) is left unsynced to push next time, not clobbered.
   await Promise.all([
     ...unsyncedCats.map(c =>
-      db.update(catalogue).set({ synced: true, lastModified: now }).where(eq(catalogue.id, c.id))
+      db.update(catalogue).set({ synced: true })
+        .where(and(eq(catalogue.id, c.id), eq(catalogue.lastModified, c.lastModified)))
     ),
     ...unsyncedItems.map(i =>
-      db.update(item).set({ synced: true, lastModified: now }).where(eq(item.id, i.id))
+      db.update(item).set({ synced: true })
+        .where(and(eq(item.id, i.id), eq(item.lastModified, i.lastModified)))
     ),
     ...unsyncedTombstones.map(t =>
       db.update(syncTombstone).set({ synced: true }).where(eq(syncTombstone.id, t.id))
@@ -352,7 +368,7 @@ async function pull(
   }
 
   for (const sc of serverCats) {
-    if (skipCatIds.has(sc.id) || tombstonedCatIds.has(sc.id)) continue;
+    if (tombstonedCatIds.has(sc.id)) continue;
     const mapped = {
       ...sc,
       fields: sc.fields != null ? JSON.stringify(sc.fields) : null,
@@ -360,18 +376,21 @@ async function pull(
     };
     const [existing] = await db.select().from(catalogue).where(eq(catalogue.id, sc.id)).limit(1);
     if (existing) {
+      // Don't skip a just-pushed row: the server may have kept a newer version
+      // (last-write-wins rejected our push), and we must take it. The timestamp
+      // comparison makes a re-applied own-push a harmless no-op.
       if (toMs(sc.lastModified) >= toMs(existing.lastModified)) {
         await db.update(catalogue).set(mapped).where(eq(catalogue.id, sc.id));
         count++;
       }
-    } else {
+    } else if (!skipCatIds.has(sc.id)) {
       await db.insert(catalogue).values(mapped).onConflictDoNothing();
       count++;
     }
   }
 
   for (const si of serverItems) {
-    if (skipItemIds.has(si.id) || tombstonedItemIds.has(si.id)) continue;
+    if (tombstonedItemIds.has(si.id)) continue;
     const mapped = {
       ...si,
       spec: si.spec != null ? JSON.stringify(si.spec) : null,
@@ -379,11 +398,14 @@ async function pull(
     };
     const [existing] = await db.select().from(item).where(eq(item.id, si.id)).limit(1);
     if (existing) {
+      // Don't skip a just-pushed row: the server may have kept a newer version
+      // (last-write-wins rejected our push), and we must take it. The timestamp
+      // comparison makes a re-applied own-push a harmless no-op.
       if (toMs(si.lastModified) >= toMs(existing.lastModified)) {
         await db.update(item).set(mapped).where(eq(item.id, si.id));
         count++;
       }
-    } else {
+    } else if (!skipItemIds.has(si.id)) {
       await db.insert(item).values(mapped).onConflictDoNothing();
       count++;
     }

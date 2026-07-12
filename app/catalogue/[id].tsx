@@ -88,14 +88,17 @@ export default function EditCatalogueScreen() {
     }
     setSaving(true);
     try {
-      // Migrate item spec data for renamed keys (position-matched)
+      const now = new Date().toISOString();
+      // Migrate item spec data for renamed keys (position-matched). Flag the
+      // touched items synced=0 + bump last_modified so the renamed values
+      // actually propagate — otherwise other devices keep the old keys.
       const oldFields: FieldDef[] = cat?.fields ? JSON.parse(cat.fields) : [];
       for (let i = 0; i < Math.min(oldFields.length, fields.length); i++) {
         const oldKey = oldFields[i]?.key;
         const newKey = fields[i]?.key;
         if (oldKey && newKey && oldKey !== newKey) {
           await db.run(
-            sql`UPDATE item SET spec = json_set(json_remove(spec, '$.' || ${oldKey}), '$.' || ${newKey}, json_extract(spec, '$.' || ${oldKey})) WHERE catalogue_id = ${id} AND json_extract(spec, '$.' || ${oldKey}) IS NOT NULL`
+            sql`UPDATE item SET spec = json_set(json_remove(spec, '$.' || ${oldKey}), '$.' || ${newKey}, json_extract(spec, '$.' || ${oldKey})), synced = 0, last_modified = ${now} WHERE catalogue_id = ${id} AND json_extract(spec, '$.' || ${oldKey}) IS NOT NULL`
           );
         }
       }
@@ -107,7 +110,7 @@ export default function EditCatalogueScreen() {
           description: description.trim() || null,
           sortOrder: sortOrder ? parseInt(sortOrder, 10) : null,
           fields: fields.length > 0 ? JSON.stringify(fields) : null,
-          lastModified: new Date().toISOString(),
+          lastModified: now,
           synced: false,
         })
         .where(eq(catalogue.id, id));

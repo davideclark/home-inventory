@@ -18,11 +18,17 @@ async function proxy(req: NextRequest, path: string[]): Promise<NextResponse> {
   const jwt = req.headers.get('x-refreshed-jwt') ?? req.cookies.get('home-inventory-jwt')?.value;
   const headers: Record<string, string> = jwt ? { 'Authorization': `Bearer ${jwt}` } : {};
 
-  // Forward real client IP so the API can rate-limit per user, not per proxy container
-  const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
-    ?? req.headers.get('x-real-ip')
-    ?? '';
-  if (clientIp) headers['X-Forwarded-For'] = clientIp;
+  // Forward the real client IP so the API can rate-limit per user. Use x-real-ip
+  // (set/overwritten by the Synology reverse proxy, so not client-spoofable) and
+  // fall back to the *last* X-Forwarded-For hop (added by the trusted proxy) —
+  // never the client-controllable leftmost entry. Forward as a single clean value.
+  const clientIp = req.headers.get('x-real-ip')?.trim()
+    || req.headers.get('x-forwarded-for')?.split(',').pop()?.trim()
+    || '';
+  if (clientIp) {
+    headers['X-Forwarded-For'] = clientIp;
+    headers['X-Real-IP'] = clientIp;
+  }
 
   if (isMultipart) {
     headers['Content-Type'] = contentType;

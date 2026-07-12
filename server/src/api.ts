@@ -1,6 +1,7 @@
 import { serve } from '@hono/node-server';
 import { getConnInfo } from '@hono/node-server/conninfo';
 import { Hono, type Context } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
 import { eq, gte, or, and, asc, desc, ilike, sql, isNotNull, count } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import { randomUUID } from 'crypto';
@@ -19,6 +20,12 @@ const SERVER_NAME = process.env.SERVER_NAME ?? 'Home Inventory';
 const IMAGE_PATH  = process.env.IMAGE_PATH  ?? './images';
 const ATTACHMENTS_DIR = join(IMAGE_PATH, 'attachments');
 
+// Cap request bodies to bound memory use (each buffers the whole body). Restore
+// ZIPs bundle all images so they get a larger, env-tunable cap.
+const MB = 1024 * 1024;
+const uploadLimit  = bodyLimit({ maxSize: 50 * MB });
+const restoreLimit = bodyLimit({ maxSize: Number(process.env.RESTORE_MAX_MB ?? 500) * MB });
+
 // ── Attachments: unified file store for item photos + documents ──────────────
 // Files live at <IMAGE_PATH>/attachments/<attachmentId>.<ext>. The extension
 // comes from a mime whitelist — never from the user-supplied filename.
@@ -30,6 +37,14 @@ function extForMime(mime: string): string { return EXT_BY_MIME[mime] ?? 'bin'; }
 function attachmentFilePath(a: { id: string; mimeType: string }): string {
   return join(ATTACHMENTS_DIR, `${a.id}.${extForMime(a.mimeType)}`);
 }
+// Only whitelisted mime types may be stored — blocks e.g. text/html uploads that
+// would otherwise be served inline on the API origin (stored XSS).
+function isAllowedMime(mime: string): boolean { return mime in EXT_BY_MIME; }
+
+// IDs are used to build filesystem paths; never trust a non-UUID id from a URL
+// param or an uploaded backup, or it could traverse outside the store.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function isUuid(s: unknown): s is string { return typeof s === 'string' && UUID_RE.test(s); }
 
 // item.hasImage is derived: true when the item has ≥1 photo attachment.
 // Bumps lastModified when the flag flips so mobile pulls learn about it.
@@ -196,9 +211,16 @@ function isPrivateIp(addr: string): boolean {
 
 function getClientIp(c: Context): string {
   const connAddr = getConnInfo(c).remote.address ?? '';
+  // Only trust forwarding headers when the TCP peer is a private/internal address
+  // (our reverse proxy / Docker network). Prefer x-real-ip (set by the trusted
+  // proxy), else the *rightmost* X-Forwarded-For hop — never the client-supplied
+  // leftmost, which would let an attacker spoof a fresh IP per request and bypass
+  // the login brute-force limiter.
   if (isPrivateIp(connAddr)) {
-    const forwarded = c.req.header('x-forwarded-for')?.split(',')[0]?.trim();
-    if (forwarded) return forwarded;
+    const realIp = c.req.header('x-real-ip')?.trim();
+    if (realIp) return realIp;
+    const lastHop = c.req.header('x-forwarded-for')?.split(',').pop()?.trim();
+    if (lastHop) return lastHop;
   }
   return connAddr || 'unknown';
 }
@@ -217,6 +239,12 @@ app.use('/api/*', async (c, next) => {
   if (authHeader?.startsWith('Bearer ')) {
     try {
       const payload = await verifyJwt(authHeader.slice(7));
+      // A forced-password-change token may only reach the auth endpoints
+      // (change-password / refresh / logout) — not the data API. Enforced here so
+      // it can't be bypassed by calling the API directly instead of via the web UI.
+      if (payload.forcePasswordChange && !path.startsWith('/api/auth/')) {
+        return c.json({ error: 'Password change required' }, 403);
+      }
       c.set('userId', payload.sub);
       c.set('userRole', payload.role);
       return next();
@@ -540,15 +568,18 @@ app.delete('/api/items/:id', async (c) => {
 
 // Ordered primary-first — clients rely on the first photo being the thumbnail
 app.get('/api/items/:id/attachments', async (c) => {
-  await migrateOneLegacyImage(c.req.param('id')); // convert any stashed pre-save upload
+  const id = c.req.param('id');
+  if (!isUuid(id)) return c.json({ error: 'Invalid id' }, 400);
+  await migrateOneLegacyImage(id); // convert any stashed pre-save upload
   const rows = await db.select().from(itemAttachment)
-    .where(eq(itemAttachment.itemId, c.req.param('id')))
+    .where(eq(itemAttachment.itemId, id))
     .orderBy(desc(itemAttachment.isPrimary), asc(itemAttachment.createdAt));
   return c.json(rows);
 });
 
-app.post('/api/items/:id/attachments', async (c) => {
+app.post('/api/items/:id/attachments', uploadLimit, async (c) => {
   const id = c.req.param('id');
+  if (!isUuid(id)) return c.json({ error: 'Invalid id' }, 400);
   const [it] = await db.select({ id: item.id }).from(item).where(eq(item.id, id)).limit(1);
   if (!it) return c.json({ error: 'Item not found' }, 404);
 
@@ -560,6 +591,7 @@ app.post('/api/items/:id/attachments', async (c) => {
   const kind = kindParam === 'photo' || kindParam === 'document' ? kindParam : undefined;
   const buf = Buffer.from(await file.arrayBuffer());
   const mimeType = file.type || 'application/octet-stream';
+  if (!isAllowedMime(mimeType)) return c.json({ error: `Unsupported file type: ${mimeType}` }, 400);
   const row = await createAttachment(id, buf, mimeType, file.name || 'file', kind);
   return c.json(row, 201);
 });
@@ -570,10 +602,14 @@ app.get('/api/attachments/:id/file', async (c) => {
   const filePath = attachmentFilePath(a);
   if (!existsSync(filePath)) return c.json({ error: 'File missing' }, 404);
   const safeName = a.originalFilename.replace(/[^\w.\- ()]/g, '_') || 'file';
+  // Documents download rather than render inline; nosniff stops the browser
+  // second-guessing the stored Content-Type.
+  const disposition = a.kind === 'document' ? 'attachment' : 'inline';
   return new Response(readFileSync(filePath), {
     headers: {
       'Content-Type': a.mimeType,
-      'Content-Disposition': `inline; filename="${safeName}"`,
+      'Content-Disposition': `${disposition}; filename="${safeName}"`,
+      'X-Content-Type-Options': 'nosniff',
       'Cache-Control': 'max-age=3600',
     },
   });
@@ -606,15 +642,18 @@ app.delete('/api/attachments/:id', async (c) => {
 // Old mobile builds and existing web thumbnails keep working: the "image" is
 // the item's primary photo (oldest photo attachment).
 
-app.post('/api/items/:id/image', async (c) => {
+app.post('/api/items/:id/image', uploadLimit, async (c) => {
   const id = c.req.param('id');
+  if (!isUuid(id)) return c.json({ error: 'Invalid id' }, 400);
   const body = await c.req.parseBody();
   const file = body['file'];
   if (!file || typeof file === 'string') return c.json({ error: 'No file provided' }, 400);
+  const mimeType = file.type || 'image/jpeg';
+  if (!isAllowedMime(mimeType)) return c.json({ error: `Unsupported file type: ${mimeType}` }, 400);
   const buf = Buffer.from(await file.arrayBuffer());
   const [it] = await db.select({ id: item.id }).from(item).where(eq(item.id, id)).limit(1);
   if (it) {
-    await createAttachment(id, buf, file.type || 'image/jpeg', file.name || 'photo.jpg', 'photo');
+    await createAttachment(id, buf, mimeType, file.name || 'photo.jpg', 'photo');
   } else {
     // Item not on the server yet — the add-item flow uploads the photo before
     // the item is saved/synced. Stash as a legacy file; migrateOneLegacyImage
@@ -626,25 +665,27 @@ app.post('/api/items/:id/image', async (c) => {
 
 app.get('/api/items/:id/image', async (c) => {
   const id = c.req.param('id');
+  if (!isUuid(id)) return c.json({ error: 'Invalid id' }, 400);
   const primary = await getPrimaryPhoto(id);
   if (primary) {
     const filePath = attachmentFilePath(primary);
     if (existsSync(filePath)) {
       return new Response(readFileSync(filePath), {
-        headers: { 'Content-Type': primary.mimeType, 'Cache-Control': 'max-age=3600' },
+        headers: { 'Content-Type': primary.mimeType, 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'max-age=3600' },
       });
     }
   }
   // Fallback for any unmigrated legacy file
   const legacy = join(IMAGE_PATH, `${id}.jpg`);
   if (existsSync(legacy)) {
-    return new Response(readFileSync(legacy), { headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'max-age=3600' } });
+    return new Response(readFileSync(legacy), { headers: { 'Content-Type': 'image/jpeg', 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'max-age=3600' } });
   }
   return c.json({ error: 'Not found' }, 404);
 });
 
 app.delete('/api/items/:id/image', async (c) => {
   const id = c.req.param('id');
+  if (!isUuid(id)) return c.json({ error: 'Invalid id' }, 400);
   const primary = await getPrimaryPhoto(id);
   if (primary) {
     const filePath = attachmentFilePath(primary);
@@ -691,7 +732,7 @@ app.get('/api/backup', async (c) => {
   });
 });
 
-app.post('/api/restore', async (c) => {
+app.post('/api/restore', restoreLimit, async (c) => {
   const body = await c.req.parseBody();
   const file = body['file'];
   if (!file || typeof file === 'string') return c.json({ error: 'No file provided' }, 400);
@@ -739,6 +780,9 @@ app.post('/api/restore', async (c) => {
   // v2: attachment rows + files under attachments/
   for (const a of data.attachments ?? []) {
     if (!importedItemIds.has(a.itemId)) continue;
+    // a.id/a.itemId come from the uploaded backup and feed attachmentFilePath —
+    // reject non-UUIDs so a crafted backup can't write outside the store.
+    if (!isUuid(a.id) || !isUuid(a.itemId)) continue;
     const { ext: _ext, ...row } = a;
     const zipEntry = zip.file(`attachments/${a.id}.${a.ext ?? extForMime(a.mimeType)}`);
     if (zipEntry) {
@@ -778,7 +822,7 @@ app.get('/api/sync/pull', async (c) => {
   return c.json({ catalogues, items, tombstones });
 });
 
-app.post('/api/sync/push', async (c) => {
+app.post('/api/sync/push', uploadLimit, async (c) => {
   const { catalogues: cats = [], items: its = [], tombstones: tombstonesIn = [] } = await c.req.json();
 
   // Process tombstones first; track IDs to skip upserts for deleted entities
@@ -797,10 +841,16 @@ app.post('/api/sync/push', async (c) => {
     }
   }
 
+  // Last-write-wins: only overwrite an existing row when the pushed record is at
+  // least as new as the stored one, so a stale device syncing late can't clobber
+  // a newer edit that reached the server first.
+  const catNewer  = sql`${catalogue.lastModified} <= excluded.last_modified`;
+  const itemNewer = sql`${item.lastModified} <= excluded.last_modified`;
+
   for (const { id: catId, ...catRest } of cats) {
     if (tombstonedCatIds.has(catId)) continue;
     await db.insert(catalogue).values({ id: catId, ...catRest })
-      .onConflictDoUpdate({ target: catalogue.id, set: catRest });
+      .onConflictDoUpdate({ target: catalogue.id, set: catRest, setWhere: catNewer });
   }
 
   const numbersCleared: number[] = [];
@@ -809,17 +859,17 @@ app.post('/api/sync/push', async (c) => {
     if (tombstonedItemIds.has(itemId)) continue;
     try {
       await db.insert(item).values({ id: itemId, ...itemRest })
-        .onConflictDoUpdate({ target: item.id, set: itemRest });
+        .onConflictDoUpdate({ target: item.id, set: itemRest, setWhere: itemNewer });
     } catch (err: any) {
       const code = err.cause?.code;
       const constraint = err.cause?.constraint_name;
       if (code === '23505' && constraint === 'item_item_number_unique') {
         if (itemRest.itemNumber != null) numbersCleared.push(itemRest.itemNumber);
         await db.insert(item).values({ id: itemId, ...itemRest, itemNumber: null })
-          .onConflictDoUpdate({ target: item.id, set: { ...itemRest, itemNumber: null } });
+          .onConflictDoUpdate({ target: item.id, set: { ...itemRest, itemNumber: null }, setWhere: itemNewer });
       } else if (code === '23503' && constraint === 'item_catalogue_id_catalogue_id_fk') {
         await db.insert(item).values({ id: itemId, ...itemRest, catalogueId: null })
-          .onConflictDoUpdate({ target: item.id, set: { ...itemRest, catalogueId: null } });
+          .onConflictDoUpdate({ target: item.id, set: { ...itemRest, catalogueId: null }, setWhere: itemNewer });
         skipped.push(itemId);
       } else {
         throw err;

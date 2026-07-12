@@ -48,6 +48,7 @@ export async function verifyJwt(token: string): Promise<JwtPayload> {
   const { payload } = await jwtVerify(token, jwtSecret(), {
     issuer: JWT_ISSUER,
     audience: JWT_AUDIENCE,
+    algorithms: ['HS256'],
   });
   return {
     sub: payload.sub as string,

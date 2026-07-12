@@ -43,7 +43,12 @@ function roomOf(it: Item, map: Map<string, Item>): string {
 }
 
 function csvEscape(v: string): string {
-  return /[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+  // Neutralise spreadsheet formula injection: a cell starting with = + - @ (or a
+  // control char Excel treats as a formula lead-in) is prefixed with a single
+  // quote so Excel/LibreOffice render it as text instead of evaluating it.
+  let s = v;
+  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
 export default function ValuationPage() {

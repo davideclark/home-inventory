@@ -8,15 +8,25 @@ function jwtSecret(): Uint8Array {
   return new TextEncoder().encode(process.env.JWT_SECRET ?? '');
 }
 
+// Pass the request through, stripping any client-supplied x-refreshed-jwt. Only
+// the silent-refresh path below may set that header; without this strip a client
+// could send it and the proxy would prefer it over the httpOnly cookie as the
+// Bearer token, defeating the cookie trust model.
+function passThrough(req: NextRequest): NextResponse {
+  const headers = new Headers(req.headers);
+  headers.delete('x-refreshed-jwt');
+  return NextResponse.next({ request: { headers } });
+}
+
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // No JWT_SECRET configured — dev mode, allow all
-  if (!process.env.JWT_SECRET) return NextResponse.next();
+  if (!process.env.JWT_SECRET) return passThrough(req);
 
   // Public paths
   if (pathname === '/login' || pathname === '/change-password' || pathname.startsWith('/api/auth/')) {
-    return NextResponse.next();
+    return passThrough(req);
   }
 
   const jwt = req.cookies.get(JWT_COOKIE)?.value;
@@ -33,7 +43,7 @@ export async function middleware(req: NextRequest) {
         url.pathname = '/change-password';
         return NextResponse.redirect(url);
       }
-      return NextResponse.next();
+      return passThrough(req);
     } catch {
       // JWT invalid or expired — fall through to silent refresh
     }
