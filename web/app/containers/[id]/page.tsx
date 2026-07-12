@@ -14,17 +14,19 @@ import type { Item, Catalogue, FieldDef } from '../../../lib/types';
 function Thumb({ item }: { item: Item }) {
   const [open, setOpen] = useState(false);
   if (!item.hasImage) return <td className="px-2 py-2 w-12" />;
+  // Keyed on lastModified so a changed primary photo isn't served from HTTP cache
+  const src = `${api.images.url(item.id)}?v=${encodeURIComponent(item.lastModified)}`;
   return (
     <td className="px-2 py-2 w-12">
       <img
-        src={api.images.url(item.id)}
+        src={src}
         alt=""
         className="w-10 h-10 rounded object-cover cursor-zoom-in"
         onClick={() => setOpen(true)}
       />
       {open && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center" onClick={() => setOpen(false)}>
-          <img src={api.images.url(item.id)} alt="" className="max-w-[90vw] max-h-[90vh] rounded-lg object-contain" onClick={e => e.stopPropagation()} />
+          <img src={src} alt="" className="max-w-[90vw] max-h-[90vh] rounded-lg object-contain" onClick={e => e.stopPropagation()} />
         </div>
       )}
     </td>

@@ -347,14 +347,37 @@ export default function ItemModal({ item, defaultCatalogueId, defaultParentId, d
             <div className="space-y-2">
               {attachments.filter(a => a.kind === 'photo').length > 0 && (
                 <div className="flex flex-wrap gap-2">
-                  {attachments.filter(a => a.kind === 'photo').map(a => (
+                  {/* Server orders primary-first, so index 0 is the current thumbnail */}
+                  {attachments.filter(a => a.kind === 'photo').map((a, idx) => (
                     <div key={a.id} className="relative group/photo">
                       <img
                         src={api.attachments.url(a.id)}
                         alt={a.originalFilename}
-                        className="w-16 h-16 rounded-lg object-cover border border-gray-200 cursor-zoom-in"
+                        title={idx === 0 ? 'Primary photo (used as thumbnail)' : a.originalFilename}
+                        className={`w-16 h-16 rounded-lg object-cover cursor-zoom-in ${
+                          idx === 0 ? 'border-2 border-blue-500' : 'border border-gray-200'
+                        }`}
                         onClick={() => setLightboxUrl(api.attachments.url(a.id))}
                       />
+                      {idx === 0 && (
+                        <span className="absolute bottom-0 inset-x-0 text-center text-[10px] leading-4 bg-blue-500/90 text-white rounded-b-lg pointer-events-none">
+                          Primary
+                        </span>
+                      )}
+                      {idx > 0 && (
+                        <button
+                          type="button"
+                          title="Make primary photo"
+                          className="absolute -top-1.5 -left-1.5 w-5 h-5 rounded-full bg-blue-500 text-white text-xs leading-none hidden group-hover/photo:flex items-center justify-center"
+                          onClick={async () => {
+                            await api.attachments.setPrimary(a.id);
+                            qc.invalidateQueries({ queryKey: ['attachments', item.id] });
+                            qc.invalidateQueries({ queryKey: ['items'] });
+                          }}
+                        >
+                          ★
+                        </button>
+                      )}
                       <button
                         type="button"
                         title="Remove photo"

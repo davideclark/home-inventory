@@ -73,7 +73,7 @@ export default function ItemDetailModal({ item, onClose, onEdit }: Props) {
       {item.hasImage && (
         <div className="-mx-6 -mt-4 mb-5">
           <img
-            src={api.images.url(item.id)}
+            src={`${api.images.url(item.id)}?v=${encodeURIComponent(item.lastModified)}`}
             alt=""
             className="w-full max-h-64 object-cover cursor-zoom-in"
             onClick={() => setLightbox(true)}
@@ -86,7 +86,7 @@ export default function ItemDetailModal({ item, onClose, onEdit }: Props) {
           onClick={() => { setLightbox(false); setLightboxUrl(null); }}
         >
           <img
-            src={lightboxUrl ?? api.images.url(item.id)}
+            src={lightboxUrl ?? `${api.images.url(item.id)}?v=${encodeURIComponent(item.lastModified)}`}
             alt=""
             className="max-w-[90vw] max-h-[90vh] rounded-lg object-contain"
             onClick={e => e.stopPropagation()}

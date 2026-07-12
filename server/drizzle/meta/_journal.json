@@ -57,6 +57,13 @@
       "when": 1783710195350,
       "tag": "0007_mighty_carlie_cooper",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1783865899035,
+      "tag": "0008_quick_roland_deschain",
+      "breakpoints": true
     }
   ]
 }

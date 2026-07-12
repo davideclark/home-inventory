@@ -432,6 +432,7 @@ export type ItemAttachment = {
   originalFilename: string;
   mimeType: string;
   size: number;
+  isPrimary: boolean;
   createdAt: string;
 };
 
@@ -467,6 +468,14 @@ export async function deleteAttachment(id: string): Promise<void> {
   const headers = await authHeaders();
   const res = await fetch(`${apiUrl}/api/attachments/${id}`, { method: 'DELETE', headers });
   if (!res.ok) throw new Error(`Could not delete attachment (${res.status})`);
+}
+
+export async function setPrimaryAttachment(id: string): Promise<void> {
+  await ensureFreshJwt();
+  const apiUrl = await getApiUrl();
+  const headers = await authHeaders();
+  const res = await fetch(`${apiUrl}/api/attachments/${id}/primary`, { method: 'POST', headers });
+  if (!res.ok) throw new Error(`Could not set primary photo (${res.status})`);
 }
 
 export async function getAttachmentUrl(id: string): Promise<{ url: string; headers: Record<string, string> }> {

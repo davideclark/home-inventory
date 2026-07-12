@@ -39,9 +39,10 @@ export const item = pgTable('item', {
 
 // Unified store for ALL item files — photos and documents (receipts etc.).
 // item.hasImage is derived from this table: true when the item has at least
-// one 'photo' attachment. The "primary" photo (thumbnail) is the oldest by
-// createdAt. Deliberately NOT part of the offline sync protocol — clients
-// fetch attachment lists over the API on demand.
+// one 'photo' attachment. The "primary" photo (thumbnail) is the one flagged
+// isPrimary, falling back to the oldest by createdAt. Deliberately NOT part
+// of the offline sync protocol — clients fetch attachment lists over the API
+// on demand.
 export const itemAttachment = pgTable('item_attachment', {
   id:               uuid('id').primaryKey().defaultRandom(),
   itemId:           uuid('item_id').notNull().references(() => item.id, { onDelete: 'cascade' }),
@@ -49,6 +50,7 @@ export const itemAttachment = pgTable('item_attachment', {
   originalFilename: text('original_filename').notNull(),
   mimeType:         text('mime_type').notNull(),
   size:             integer('size').notNull(),
+  isPrimary:        boolean('is_primary').notNull().default(false),
   createdAt:        text('created_at').notNull().default(sql`to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`),
 },
 (table) => ({

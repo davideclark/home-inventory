@@ -1,7 +1,7 @@
 import { serve } from '@hono/node-server';
 import { getConnInfo } from '@hono/node-server/conninfo';
 import { Hono, type Context } from 'hono';
-import { eq, gte, or, and, asc, ilike, sql, isNotNull, count } from 'drizzle-orm';
+import { eq, gte, or, and, asc, desc, ilike, sql, isNotNull, count } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import { randomUUID } from 'crypto';
 import { readFileSync, writeFileSync, mkdirSync, existsSync, unlinkSync, readdirSync, statSync, renameSync } from 'node:fs';
@@ -57,11 +57,12 @@ async function createAttachment(itemId: string, buf: Buffer, mimeType: string, o
   return row;
 }
 
-// Oldest photo attachment = the item's primary photo (thumbnail).
+// The item's primary photo (thumbnail): the one flagged isPrimary, falling
+// back to the oldest photo when none is flagged.
 async function getPrimaryPhoto(itemId: string) {
   const [row] = await db.select().from(itemAttachment)
     .where(and(eq(itemAttachment.itemId, itemId), eq(itemAttachment.kind, 'photo')))
-    .orderBy(asc(itemAttachment.createdAt)).limit(1);
+    .orderBy(desc(itemAttachment.isPrimary), asc(itemAttachment.createdAt)).limit(1);
   return row;
 }
 
@@ -525,10 +526,11 @@ app.delete('/api/items/:id', async (c) => {
 
 // ── Attachments (unified store for photos + documents) ──────────────────────
 
+// Ordered primary-first — clients rely on the first photo being the thumbnail
 app.get('/api/items/:id/attachments', async (c) => {
   const rows = await db.select().from(itemAttachment)
     .where(eq(itemAttachment.itemId, c.req.param('id')))
-    .orderBy(asc(itemAttachment.createdAt));
+    .orderBy(desc(itemAttachment.isPrimary), asc(itemAttachment.createdAt));
   return c.json(rows);
 });
 
@@ -562,6 +564,19 @@ app.get('/api/attachments/:id/file', async (c) => {
       'Cache-Control': 'max-age=3600',
     },
   });
+});
+
+// Make a photo attachment the item's primary photo (thumbnail). Bumps the
+// item's lastModified so image URLs keyed on it re-fetch instead of serving
+// the old thumbnail from HTTP cache.
+app.post('/api/attachments/:id/primary', async (c) => {
+  const [a] = await db.select().from(itemAttachment).where(eq(itemAttachment.id, c.req.param('id'))).limit(1);
+  if (!a) return c.json({ error: 'Not found' }, 404);
+  if (a.kind !== 'photo') return c.json({ error: 'Only photos can be the primary image' }, 400);
+  await db.update(itemAttachment).set({ isPrimary: false }).where(eq(itemAttachment.itemId, a.itemId));
+  await db.update(itemAttachment).set({ isPrimary: true }).where(eq(itemAttachment.id, a.id));
+  await db.update(item).set({ lastModified: new Date().toISOString() }).where(eq(item.id, a.itemId));
+  return c.json({ ok: true });
 });
 
 app.delete('/api/attachments/:id', async (c) => {

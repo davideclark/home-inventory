@@ -13,7 +13,7 @@ import { db } from '../db';
 import { item, catalogue } from '../schema';
 import {
   getImageUrl, isServerConfigured,
-  listAttachments, uploadAttachment, deleteAttachment, getAttachmentUrl,
+  listAttachments, uploadAttachment, deleteAttachment, setPrimaryAttachment, getAttachmentUrl,
   type ItemAttachment,
 } from '../sync';
 import CatalogueIcon from '../components/CatalogueIcon';
@@ -56,9 +56,10 @@ export default function ItemDetailScreen() {
   useEffect(() => {
     if (!i?.hasImage) { setImgSrc(null); return; }
     getImageUrl(i.id).then(({ url, headers }) => {
-      setImgSrc({ uri: url, headers: Object.keys(headers).length ? headers : undefined });
+      // Keyed on lastModified so a changed primary photo isn't served from the image cache
+      setImgSrc({ uri: `${url}?v=${encodeURIComponent(i.lastModified)}`, headers: Object.keys(headers).length ? headers : undefined });
     });
-  }, [i?.id, i?.hasImage]);
+  }, [i?.id, i?.hasImage, i?.lastModified]);
 
   // Attachments — online-only; the section is hidden when the server isn't reachable
   const [attachments, setAttachments] = useState<ItemAttachment[] | null>(null);
@@ -156,6 +157,30 @@ export default function ItemDetailScreen() {
           }
         },
       },
+    ]);
+  }
+
+  function photoOptions(a: ItemAttachment, isPrimary: boolean) {
+    Alert.alert('Photo', undefined, [
+      ...(!isPrimary ? [{
+        text: 'Make Primary Photo',
+        onPress: async () => {
+          try {
+            await setPrimaryAttachment(a.id);
+            await loadAttachments();
+            // Refresh the hero image immediately — the local item row's
+            // lastModified only updates on the next sync
+            if (i?.hasImage) {
+              const { url, headers } = await getImageUrl(i.id);
+              setImgSrc({ uri: `${url}?v=${Date.now()}`, headers: Object.keys(headers).length ? headers : undefined });
+            }
+          } catch (e) {
+            Alert.alert('Could not set primary photo', e instanceof Error ? e.message : String(e));
+          }
+        },
+      }] : []),
+      { text: 'Remove', style: 'destructive', onPress: () => confirmDeleteAttachment(a) },
+      { text: 'Cancel', style: 'cancel' },
     ]);
   }
 
@@ -260,10 +285,16 @@ export default function ItemDetailScreen() {
             <Text style={styles.label}>Photos & Receipts</Text>
             {attachments.filter(a => a.kind === 'photo').length > 0 && (
               <View style={styles.attachmentGrid}>
-                {attachments.filter(a => a.kind === 'photo').map(a => (
+                {/* Server orders primary-first, so index 0 is the current thumbnail */}
+                {attachments.filter(a => a.kind === 'photo').map((a, idx) => (
                   photoSrcs[a.id] ? (
-                    <Pressable key={a.id} onPress={() => openAttachment(a)} onLongPress={() => confirmDeleteAttachment(a)}>
-                      <ExpoImage source={photoSrcs[a.id]} style={styles.attachmentThumb} contentFit="cover" />
+                    <Pressable key={a.id} onPress={() => openAttachment(a)} onLongPress={() => photoOptions(a, idx === 0)}>
+                      <ExpoImage source={photoSrcs[a.id]} style={[styles.attachmentThumb, idx === 0 && styles.attachmentThumbPrimary]} contentFit="cover" />
+                      {idx === 0 && (
+                        <View style={styles.primaryBadge}>
+                          <Text style={styles.primaryBadgeText}>Primary</Text>
+                        </View>
+                      )}
                     </Pressable>
                   ) : null
                 ))}
@@ -295,7 +326,7 @@ export default function ItemDetailScreen() {
                 <Text style={styles.attachmentBtnText}>📎 Add Document</Text>
               </Pressable>
             </View>
-            <Text style={styles.attachmentHint}>Tap to open · long-press a photo to remove</Text>
+            <Text style={styles.attachmentHint}>Tap to open · long-press a photo for options</Text>
           </View>
         )}
 
@@ -335,6 +366,18 @@ const styles = StyleSheet.create({
   notes: { fontSize: 15, color: '#111', lineHeight: 22 },
   attachmentGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   attachmentThumb: { width: 72, height: 72, borderRadius: 8, backgroundColor: '#f0f0f5' },
+  attachmentThumbPrimary: { borderWidth: 2, borderColor: '#007AFF' },
+  primaryBadge: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0, 122, 255, 0.9)',
+    borderBottomLeftRadius: 8,
+    borderBottomRightRadius: 8,
+    paddingVertical: 1,
+  },
+  primaryBadgeText: { fontSize: 9, color: '#fff', fontWeight: '600', textAlign: 'center' },
   attachmentRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   attachmentName: { flex: 1 },
   attachmentNameText: { fontSize: 15, color: '#007AFF' },

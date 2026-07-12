@@ -27,6 +27,7 @@ export type ItemAttachment = {
   originalFilename: string;
   mimeType: string;
   size: number;
+  isPrimary: boolean;
   createdAt: string;
 };
 

@@ -1,0 +1,1 @@
+ALTER TABLE "item_attachment" ADD COLUMN "is_primary" boolean DEFAULT false NOT NULL;

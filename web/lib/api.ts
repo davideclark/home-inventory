@@ -69,6 +69,8 @@ export const api = {
     },
     delete: (id: string): Promise<{ ok: boolean }> =>
       req(`attachments/${id}`, { method: 'DELETE' }),
+    setPrimary: (id: string): Promise<{ ok: boolean }> =>
+      req(`attachments/${id}/primary`, { method: 'POST' }),
     url: (id: string) => `${BASE}/attachments/${id}/file`,
   },
 };
